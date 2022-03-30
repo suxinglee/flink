@@ -53,7 +53,7 @@ import static org.apache.pulsar.broker.ServiceConfigurationUtils.webServiceUrl;
 import static org.apache.pulsar.common.naming.NamespaceName.SYSTEM_NAMESPACE;
 import static org.apache.pulsar.common.naming.TopicName.TRANSACTION_COORDINATOR_ASSIGN;
 
-/** Providing a embedded pulsar server. We use this runtime for transaction related tests. */
+/** Providing an embedded pulsar server. We use this runtime for transaction related tests. */
 public class PulsarEmbeddedRuntime implements PulsarRuntime {
     private static final Logger LOG = LoggerFactory.getLogger(PulsarEmbeddedRuntime.class);
 
@@ -95,7 +95,6 @@ public class PulsarEmbeddedRuntime implements PulsarRuntime {
         try {
             if (operator != null) {
                 operator.close();
-                this.operator = null;
             }
             if (pulsarService != null) {
                 pulsarService.close();
