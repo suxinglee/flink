@@ -31,7 +31,7 @@ import java.util.Objects;
 
 import static org.apache.flink.util.Preconditions.checkState;
 
-/** This cursor would left pulsar start consuming from a specific message id. */
+/** This cursor would leave pulsar start consuming from a specific message id. */
 public class MessageIdStartCursor implements StartCursor {
     private static final long serialVersionUID = -8057345435887170111L;
 
