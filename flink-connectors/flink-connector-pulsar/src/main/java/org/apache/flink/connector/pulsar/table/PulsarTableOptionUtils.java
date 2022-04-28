@@ -234,7 +234,7 @@ public class PulsarTableOptionUtils {
     }
 
     protected static StartCursor parsePublishTimeStartCursor(Long config) {
-        return StartCursor.fromMessageTime(config);
+        return StartCursor.fromPublishTime(config);
     }
 
     // --------------------------------------------------------------------------------------------

@@ -62,7 +62,7 @@ class PulsarSinkITCase extends PulsarTestSuiteBase {
         @TestEnv MiniClusterTestEnvironment flink = new MiniClusterTestEnvironment();
 
         @TestExternalSystem
-        PulsarTestEnvironment pulsar = new PulsarTestEnvironment(PulsarRuntime.embedded());
+        PulsarTestEnvironment pulsar = new PulsarTestEnvironment(PulsarRuntime.mock());
 
         @TestSemantics
         CheckpointingMode[] semantics =
