@@ -1,0 +1,25 @@
+name: Daily End to End Test
+
+on:
+  schedule:
+    - cron: 0 1 * * *
+  workflow_dispatch:
+jobs:
+  sync:
+    name: Run End to End test for pulsar
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        branch:
+          - develop
+          - relesae-sn-1.14
+          - release-sn-1.15
+    steps:
+      - name: Checkout the code
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ matrix.branch }}
+      - name: Run e2e Test
+        run: |
+          ./mvnw clean install  -DskipTests
+          ./mvnw -pl 'flink-end-to-end-tests/flink-end-to-end-tests-pulsar' test
