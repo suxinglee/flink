@@ -1,0 +1,20 @@
+name: Run Test for Pull Request
+
+on:
+  pull_request:
+    branches: [ develop, release-sn-** ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the code
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Run Unit Test and Install
+        run: |
+          ./mvnw -pl 'flink-connectors/flink-connector-pulsar,flink-connectors/flink-sql-connector-pulsar' \
+          clean install
+
