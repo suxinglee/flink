@@ -20,11 +20,9 @@ package org.apache.flink.connector.pulsar.source.enumerator.cursor;
 
 import org.apache.flink.annotation.PublicEvolving;
 import org.apache.flink.connector.pulsar.source.enumerator.cursor.start.MessageIdStartCursor;
-import org.apache.flink.connector.pulsar.source.enumerator.cursor.start.TimestampStartCursor;
+import org.apache.flink.connector.pulsar.source.enumerator.cursor.start.PublishTimestampStartCursor;
 
-import org.apache.pulsar.client.api.Consumer;
 import org.apache.pulsar.client.api.MessageId;
-import org.apache.pulsar.client.api.PulsarClientException;
 import org.apache.pulsar.client.api.SubscriptionType;
 
 import java.io.Serializable;
@@ -43,13 +41,6 @@ public interface StartCursor extends Serializable {
 
     CursorPosition position(String topic, int partitionId);
 
-    /** Helper method for seek the right position for given pulsar consumer. */
-    default void seekPosition(String topic, int partitionId, Consumer<?> consumer)
-            throws PulsarClientException {
-        CursorPosition position = position(topic, partitionId);
-        position.seekPosition(consumer);
-    }
-
     // --------------------------- Static Factory Methods -----------------------------
 
     static StartCursor defaultStartCursor() {
@@ -64,6 +55,10 @@ public interface StartCursor extends Serializable {
         return fromMessageId(MessageId.latest);
     }
 
+    /**
+     * Find the available message id and start consuming from it. The given message is included in
+     * the consuming result by default.
+     */
     static StartCursor fromMessageId(MessageId messageId) {
         return fromMessageId(messageId, true);
     }
@@ -76,7 +71,7 @@ public interface StartCursor extends Serializable {
         return new MessageIdStartCursor(messageId, inclusive);
     }
 
-    static StartCursor fromMessageTime(long timestamp) {
-        return new TimestampStartCursor(timestamp);
+    static StartCursor fromPublishTime(long timestamp) {
+        return new PublishTimestampStartCursor(timestamp);
     }
 }

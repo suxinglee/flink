@@ -22,6 +22,11 @@ import org.apache.flink.connector.pulsar.source.enumerator.cursor.StopCursor;
 
 import org.apache.pulsar.client.api.Message;
 import org.apache.pulsar.client.api.MessageId;
+import org.apache.pulsar.client.impl.BatchMessageIdImpl;
+import org.apache.pulsar.client.impl.MessageIdImpl;
+
+import static org.apache.flink.util.Preconditions.checkArgument;
+import static org.apache.flink.util.Preconditions.checkState;
 
 /**
  * Stop consuming message at a given message id. We use the {@link MessageId#compareTo(Object)} for
@@ -39,7 +44,16 @@ public class MessageIdStopCursor implements StopCursor {
     }
 
     public MessageIdStopCursor(MessageId messageId, boolean exclusive) {
-        this.messageId = messageId;
+        MessageIdImpl id = MessageIdImpl.convertToMessageIdImpl(messageId);
+        checkState(
+                !(id instanceof BatchMessageIdImpl),
+                "We only support normal message id currently.");
+        checkArgument(!MessageId.earliest.equals(id), "MessageId.earliest is not supported.");
+        checkArgument(
+                !MessageId.latest.equals(id),
+                "MessageId.latest is not supported, use LatestMessageStopCursor instead.");
+
+        this.messageId = id;
         this.exclusive = exclusive;
     }
 
