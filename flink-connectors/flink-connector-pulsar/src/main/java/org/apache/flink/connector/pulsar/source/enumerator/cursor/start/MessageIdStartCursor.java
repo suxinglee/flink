@@ -23,7 +23,9 @@ import org.apache.flink.connector.pulsar.source.enumerator.cursor.StartCursor;
 
 import org.apache.pulsar.client.api.ConsumerBuilder;
 import org.apache.pulsar.client.api.MessageId;
+import org.apache.pulsar.client.impl.BatchMessageIdImpl;
 import org.apache.pulsar.client.impl.MessageIdImpl;
+import org.apache.pulsar.client.internal.DefaultImplementation;
 
 import java.util.Objects;
 
@@ -48,20 +50,33 @@ public class MessageIdStartCursor implements StartCursor {
      * @param inclusive Should we include the start message id in consuming result.
      */
     public MessageIdStartCursor(MessageId messageId, boolean inclusive) {
-        if (inclusive) {
-            this.messageId = messageId;
+        MessageIdImpl id = MessageIdImpl.convertToMessageIdImpl(messageId);
+        checkState(
+                !(id instanceof BatchMessageIdImpl),
+                "We only support normal message id currently.");
+
+        if (MessageId.earliest.equals(id) || MessageId.latest.equals(id) || inclusive) {
+            this.messageId = id;
         } else {
-            checkState(
-                    messageId instanceof MessageIdImpl,
-                    "We only support normal message id and batch message id.");
-            MessageIdImpl id = (MessageIdImpl) messageId;
-            if (MessageId.earliest.equals(messageId) || MessageId.latest.equals(messageId)) {
-                this.messageId = messageId;
-            } else {
-                this.messageId =
-                        new MessageIdImpl(
-                                id.getLedgerId(), id.getEntryId() + 1, id.getPartitionIndex());
-            }
+            this.messageId = getNext(id);
+        }
+    }
+
+    /**
+     * The implementation from the <a
+     * href="https://github.com/apache/pulsar/blob/7c8dc3201baad7d02d886dbc26db5c03abce77d6/managed-ledger/src/main/java/org/apache/bookkeeper/mledger/impl/PositionImpl.java#L85">this
+     * code</a> to get the next message id.
+     */
+    private MessageId getNext(MessageIdImpl messageId) {
+        if (messageId.getEntryId() < 0) {
+            return DefaultImplementation.getDefaultImplementation()
+                    .newMessageId(messageId.getLedgerId(), 0, messageId.getPartitionIndex());
+        } else {
+            return DefaultImplementation.getDefaultImplementation()
+                    .newMessageId(
+                            messageId.getLedgerId(),
+                            messageId.getEntryId() + 1,
+                            messageId.getPartitionIndex());
         }
     }
 

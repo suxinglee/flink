@@ -258,7 +258,7 @@ The Pulsar connector consumes from the latest available message if the message I
   ```
 - Start from the specified message time by `Message<byte[]>.getPublishTime()`.
   ```java
-  StartCursor.fromMessageTime(long);
+  StartCursor.fromPublishTime(long);
   ```
 
 {{< hint info >}}

@@ -217,9 +217,8 @@ Pulsar Source 使用 `setStartCursor(StartCursor)` 方法给定开始消费的�
   ```java
   StartCursor.fromMessageId(MessageId, boolean);
   ```
-- 从给定的消息时间开始消费。
-  ```java
-  StartCursor.fromMessageTime(long);
+- 从给定的消息发布时间开始消费。
+  StartCursor.fromPublishTime(long)
   ```
 
 {{< hint info >}}

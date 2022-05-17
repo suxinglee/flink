@@ -19,11 +19,8 @@
 package org.apache.flink.connector.pulsar.source.enumerator.cursor;
 
 import org.apache.flink.annotation.PublicEvolving;
-import org.apache.flink.annotation.VisibleForTesting;
 
-import org.apache.pulsar.client.api.Consumer;
 import org.apache.pulsar.client.api.MessageId;
-import org.apache.pulsar.client.api.PulsarClientException;
 
 import javax.annotation.Nullable;
 
@@ -52,22 +49,16 @@ public final class CursorPosition implements Serializable {
         this.timestamp = timestamp;
     }
 
-    @VisibleForTesting
+    public Type getType() {
+        return type;
+    }
+
     public MessageId getMessageId() {
         return messageId;
     }
 
-    /** Pulsar consumer could be subscribed by the position. */
-    public void seekPosition(Consumer<?> consumer) throws PulsarClientException {
-        if (type == Type.MESSAGE_ID) {
-            consumer.seek(messageId);
-        } else {
-            if (timestamp != null) {
-                consumer.seek(timestamp);
-            } else {
-                consumer.seek(System.currentTimeMillis());
-            }
-        }
+    public Long getTimestamp() {
+        return timestamp;
     }
 
     @Override
