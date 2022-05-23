@@ -19,7 +19,11 @@ jobs:
         uses: actions/checkout@v2
         with:
           ref: ${{ matrix.branch }}
+      - name: Set up Maven
+        uses: apache/pulsar-test-infra/setup-maven@master
+        with:
+          maven-version: 3.6.2
       - name: Run e2e Test
         run: |
-          ./mvnw clean install  -DskipTests
-          ./mvnw -pl 'flink-end-to-end-tests/flink-end-to-end-tests-pulsar' test
+          mvn clean install -DskipTests
+          mvn -pl 'flink-end-to-end-tests/flink-end-to-end-tests-pulsar' test
