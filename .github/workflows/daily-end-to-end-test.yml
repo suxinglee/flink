@@ -12,7 +12,7 @@ jobs:
       matrix:
         branch:
           - develop
-          - relesae-sn-1.14
+          - release-sn-1.14
           - release-sn-1.15
     steps:
       - name: Checkout the code
