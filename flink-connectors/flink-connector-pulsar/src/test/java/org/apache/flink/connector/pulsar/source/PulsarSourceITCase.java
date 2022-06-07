@@ -32,14 +32,15 @@ import org.apache.flink.connector.testframe.junit.annotations.TestExternalSystem
 import org.apache.flink.connector.testframe.junit.annotations.TestSemantics;
 import org.apache.flink.connector.testframe.testsuites.SourceTestSuiteBase;
 import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.test.junit5.MiniClusterExtension;
 
-import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.extension.ExtendWith;
 
 /** Unite test class for {@link PulsarSource}. */
 @SuppressWarnings("unused")
+@ExtendWith(MiniClusterExtension.class)
 class PulsarSourceITCase extends SourceTestSuiteBase<String> {
 
-    @Disabled // TODO: remove override after FLINK-26177 is fixed
     @Override
     public void testScaleUp(
             TestEnvironment testEnv,
@@ -49,7 +50,6 @@ class PulsarSourceITCase extends SourceTestSuiteBase<String> {
         super.testScaleUp(testEnv, externalContext, semantic);
     }
 
-    @Disabled // TODO: remove override after FLINK-26177 is fixed
     @Override
     public void testScaleDown(
             TestEnvironment testEnv,

@@ -12,9 +12,12 @@ jobs:
         uses: actions/checkout@v2
         with:
           ref: ${{ github.event.pull_request.head.sha }}
-
+      - name: Set up Maven
+        uses: apache/pulsar-test-infra/setup-maven@master
+        with:
+          maven-version: 3.6.2
       - name: Run Unit Test and Install
         run: |
-          ./mvnw -pl 'flink-connectors/flink-connector-pulsar,flink-connectors/flink-sql-connector-pulsar' \
+          mvn -ntp -pl 'flink-connectors/flink-connector-pulsar,flink-connectors/flink-sql-connector-pulsar' \
           clean install
 
