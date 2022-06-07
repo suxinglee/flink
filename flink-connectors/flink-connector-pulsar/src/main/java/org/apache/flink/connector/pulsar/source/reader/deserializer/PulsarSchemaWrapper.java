@@ -18,8 +18,10 @@
 package org.apache.flink.connector.pulsar.source.reader.deserializer;
 
 import org.apache.flink.annotation.Internal;
+import org.apache.flink.api.common.serialization.DeserializationSchema;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.connector.pulsar.common.schema.PulsarSchema;
+import org.apache.flink.connector.pulsar.source.config.SourceConfiguration;
 import org.apache.flink.util.Collector;
 
 import org.apache.pulsar.client.api.Message;
@@ -41,22 +43,45 @@ class PulsarSchemaWrapper<T> implements PulsarDeserializationSchema<T> {
     /** The serializable pulsar schema, it wrap the schema with type class. */
     private final PulsarSchema<T> pulsarSchema;
 
+    private boolean isSchemaEvolutionEnabled;
+
     public PulsarSchemaWrapper(PulsarSchema<T> pulsarSchema) {
         this.pulsarSchema = pulsarSchema;
     }
 
     @Override
-    public void deserialize(Message<byte[]> message, Collector<T> out) throws Exception {
-        Schema<T> schema = this.pulsarSchema.getPulsarSchema();
-        byte[] bytes = message.getData();
-        T instance = schema.decode(bytes);
+    public void open(
+            DeserializationSchema.InitializationContext context, SourceConfiguration configuration)
+            throws Exception {
+        this.isSchemaEvolutionEnabled = configuration.isEnableSchemaEvolution();
+    }
 
-        out.collect(instance);
+    @Override
+    public void deserialize(Message<?> message, Collector<T> out) throws Exception {
+        if (isSchemaEvolutionEnabled) {
+            @SuppressWarnings("unchecked")
+            T value = (T) message.getValue();
+            out.collect(value);
+        } else {
+            Schema<T> schema = this.pulsarSchema.getPulsarSchema();
+            byte[] bytes = message.getData();
+            T instance = schema.decode(bytes);
+            out.collect(instance);
+        }
     }
 
     @Override
     public TypeInformation<T> getProducedType() {
         SchemaInfo info = pulsarSchema.getSchemaInfo();
         return createTypeInformation(info);
+    }
+
+    @Override
+    public Schema<?> schema() {
+        if (isSchemaEvolutionEnabled) {
+            return pulsarSchema.getPulsarSchema();
+        } else {
+            return Schema.BYTES;
+        }
     }
 }
