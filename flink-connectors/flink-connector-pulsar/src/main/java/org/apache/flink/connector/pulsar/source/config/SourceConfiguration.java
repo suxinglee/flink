@@ -88,6 +88,10 @@ public class SourceConfiguration extends PulsarConfiguration {
         return messageQueueCapacity;
     }
 
+    /**
+     * We would override the interval into a negative number when we set the connector with bounded
+     * stop cursor.
+     */
     public boolean isEnablePartitionDiscovery() {
         return getPartitionDiscoveryIntervalMs() > 0;
     }
@@ -190,16 +194,6 @@ public class SourceConfiguration extends PulsarConfiguration {
      */
     public SubscriptionMode getSubscriptionMode() {
         return subscriptionMode;
-    }
-
-    /** Convert the subscription into a readable str. */
-    public String getSubscriptionDesc() {
-        return getSubscriptionName()
-                + "("
-                + getSubscriptionType()
-                + ","
-                + getSubscriptionMode()
-                + ")";
     }
 
     @Override
