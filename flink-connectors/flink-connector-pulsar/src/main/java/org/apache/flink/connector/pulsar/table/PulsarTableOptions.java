@@ -213,4 +213,10 @@ public class PulsarTableOptions {
                                                     code(
                                                             "pulsar+ssl://pulsar.us-west.example.com:6651")))
                                     .build());
+
+    public static final ConfigOption<Boolean> EXPLICIT =
+            ConfigOptions.key("explicit")
+                    .booleanType()
+                    .defaultValue(true)
+                    .withDescription("Indicate if the table is an explict flink table");
 }

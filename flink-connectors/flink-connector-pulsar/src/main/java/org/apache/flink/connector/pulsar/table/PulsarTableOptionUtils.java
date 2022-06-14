@@ -182,6 +182,14 @@ public class PulsarTableOptionUtils {
         return pulsarProperties;
     }
 
+    public static Properties getPulsarProperties(Map<String, String> configs) {
+        final Properties pulsarProperties = new Properties();
+        configs.keySet().stream()
+                .filter(key -> key.startsWith("pulsar"))
+                .forEach(key -> pulsarProperties.put(key, configs.get(key)));
+        return pulsarProperties;
+    }
+
     public static StartCursor getStartCursor(ReadableConfig tableOptions) {
         if (tableOptions.getOptional(SOURCE_START_FROM_MESSAGE_ID).isPresent()) {
             return parseMessageIdStartCursor(tableOptions.get(SOURCE_START_FROM_MESSAGE_ID));
@@ -261,7 +269,6 @@ public class PulsarTableOptionUtils {
         }
     }
 
-    // TODO what if we use a topicRouter and set TopicRoutingMode to CUSTOM ?
     public static TopicRoutingMode getTopicRoutingMode(ReadableConfig readableConfig) {
         return readableConfig.get(SINK_TOPIC_ROUTING_MODE);
     }
