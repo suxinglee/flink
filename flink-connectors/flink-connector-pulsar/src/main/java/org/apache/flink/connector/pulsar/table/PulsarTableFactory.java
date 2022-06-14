@@ -69,6 +69,7 @@ import static org.apache.flink.connector.pulsar.table.PulsarTableOptionUtils.get
 import static org.apache.flink.connector.pulsar.table.PulsarTableOptionUtils.getValueDecodingFormat;
 import static org.apache.flink.connector.pulsar.table.PulsarTableOptionUtils.getValueEncodingFormat;
 import static org.apache.flink.connector.pulsar.table.PulsarTableOptions.ADMIN_URL;
+import static org.apache.flink.connector.pulsar.table.PulsarTableOptions.EXPLICIT;
 import static org.apache.flink.connector.pulsar.table.PulsarTableOptions.KEY_FIELDS;
 import static org.apache.flink.connector.pulsar.table.PulsarTableOptions.KEY_FORMAT;
 import static org.apache.flink.connector.pulsar.table.PulsarTableOptions.SERVICE_URL;
@@ -237,16 +238,15 @@ public class PulsarTableFactory implements DynamicTableSourceFactory, DynamicTab
         return IDENTIFIER;
     }
 
-    // TODO source_subscription_name has default value so it should be optional ?
     @Override
     public Set<ConfigOption<?>> requiredOptions() {
-        return Stream.of(TOPICS, ADMIN_URL, SERVICE_URL, FORMAT, SOURCE_SUBSCRIPTION_NAME)
-                .collect(Collectors.toSet());
+        return Stream.of(TOPICS, ADMIN_URL, SERVICE_URL, FORMAT).collect(Collectors.toSet());
     }
 
     @Override
     public Set<ConfigOption<?>> optionalOptions() {
         return Stream.of(
+                        SOURCE_SUBSCRIPTION_NAME,
                         SOURCE_SUBSCRIPTION_TYPE,
                         SOURCE_START_FROM_MESSAGE_ID,
                         SOURCE_START_FROM_PUBLISH_TIME,
@@ -255,7 +255,8 @@ public class PulsarTableFactory implements DynamicTableSourceFactory, DynamicTab
                         SINK_MESSAGE_DELAY_INTERVAL,
                         SINK_PARALLELISM,
                         KEY_FORMAT,
-                        KEY_FIELDS)
+                        KEY_FIELDS,
+                        EXPLICIT)
                 .collect(Collectors.toSet());
     }
 

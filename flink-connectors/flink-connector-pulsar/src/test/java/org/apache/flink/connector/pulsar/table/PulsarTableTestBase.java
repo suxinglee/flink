@@ -38,21 +38,25 @@ import org.slf4j.LoggerFactory;
 /** Base class for Pulsar table integration test. */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public abstract class PulsarTableTestBase {
-    // TODO fix the archunit violations
     private static final Logger LOG = LoggerFactory.getLogger(PulsarTableTestBase.class);
 
     @TestEnv MiniClusterTestEnvironment flink = new MiniClusterTestEnvironment();
 
     // Defines pulsar running environment
     @TestExternalSystem
-    PulsarTestEnvironment pulsar = new PulsarTestEnvironment(PulsarRuntime.container());
+    protected PulsarTestEnvironment pulsar = new PulsarTestEnvironment(runtime());
 
     @TestSemantics
-    CheckpointingMode[] semantics = new CheckpointingMode[] {CheckpointingMode.EXACTLY_ONCE};
+    protected CheckpointingMode[] semantics =
+            new CheckpointingMode[] {CheckpointingMode.EXACTLY_ONCE};
 
     protected StreamExecutionEnvironment env;
 
     protected StreamTableEnvironment tableEnv;
+
+    protected PulsarRuntime runtime() {
+        return PulsarRuntime.container();
+    }
 
     @BeforeAll
     public void beforeAll() {
@@ -62,6 +66,9 @@ public abstract class PulsarTableTestBase {
         env.setParallelism(1);
         env.getConfig().setRestartStrategy(RestartStrategies.noRestart());
         tableEnv = StreamTableEnvironment.create(env);
+        tableEnv.getConfig()
+                .getConfiguration()
+                .setString("table.dynamic-table-options.enabled", "true");
     }
 
     public void createTestTopic(String topic, int numPartitions) {

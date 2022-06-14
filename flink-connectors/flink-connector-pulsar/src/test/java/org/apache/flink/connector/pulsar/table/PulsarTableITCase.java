@@ -20,7 +20,6 @@ package org.apache.flink.connector.pulsar.table;
 
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.functions.sink.SinkFunction;
-import org.apache.flink.table.data.RowData;
 import org.apache.flink.test.junit5.MiniClusterExtension;
 import org.apache.flink.test.util.SuccessException;
 import org.apache.flink.types.Row;
@@ -112,8 +111,7 @@ public class PulsarTableITCase extends PulsarTableTestBase {
                         + "FROM pulsar_source_sink\n"
                         + "GROUP BY TUMBLE(ts, INTERVAL '5' SECOND)";
 
-        DataStream<RowData> result =
-                tableEnv.toAppendStream(tableEnv.sqlQuery(query), RowData.class);
+        DataStream<Row> result = tableEnv.toDataStream(tableEnv.sqlQuery(query));
         TestingSinkFunction sink = new TestingSinkFunction(2);
         result.addSink(sink).setParallelism(1);
 
@@ -128,8 +126,8 @@ public class PulsarTableITCase extends PulsarTableTestBase {
 
         List<String> expected =
                 Arrays.asList(
-                        "+I(2019-12-12 00:00:05.000,2019-12-12,00:00:03,2019-12-12 00:00:04.004,3,50.00)",
-                        "+I(2019-12-12 00:00:10.000,2019-12-12,00:00:05,2019-12-12 00:00:06.006,2,5.33)");
+                        "+I[2019-12-12 00:00:05.000, 2019-12-12, 00:00:03, 2019-12-12 00:00:04.004, 3, 50.00]",
+                        "+I[2019-12-12 00:00:10.000, 2019-12-12, 00:00:05, 2019-12-12 00:00:06.006, 2, 5.33]");
 
         assertThat(TestingSinkFunction.rows).isEqualTo(expected);
     }
@@ -257,7 +255,7 @@ public class PulsarTableITCase extends PulsarTableTestBase {
                                 true));
     }
 
-    private static final class TestingSinkFunction implements SinkFunction<RowData> {
+    private static final class TestingSinkFunction implements SinkFunction<Row> {
 
         private static final long serialVersionUID = 455430015321124493L;
         private static List<String> rows = new ArrayList<>();
@@ -270,7 +268,7 @@ public class PulsarTableITCase extends PulsarTableTestBase {
         }
 
         @Override
-        public void invoke(RowData value, Context context) {
+        public void invoke(Row value, Context context) {
             rows.add(value.toString());
             if (rows.size() >= expectedSize) {
                 // job finish

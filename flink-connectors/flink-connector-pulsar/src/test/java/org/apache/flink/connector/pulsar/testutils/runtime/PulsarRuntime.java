@@ -63,7 +63,17 @@ public interface PulsarRuntime {
      * disabled on Pulsar broker.
      */
     static PulsarRuntime container() {
-        return new PulsarContainerRuntime();
+        return new PulsarContainerRuntime(false);
+    }
+
+    /**
+     * Create a Pulsar instance in docker. We would start a standalone Pulsar in TestContainers.
+     * This runtime is often used in end-to-end tests. The performance may be a bit of slower than
+     * {@link #embedded()}. The stream storage for bookkeeper is disabled. The function worker is
+     * disabled on Pulsar broker.
+     */
+    static PulsarRuntime authContainer() {
+        return new PulsarContainerRuntime(true);
     }
 
     /**
@@ -76,6 +86,6 @@ public interface PulsarRuntime {
      * enable the connection for Pulsar and Flink in docker environment.
      */
     static PulsarRuntime container(GenericContainer<?> flinkContainer) {
-        return new PulsarContainerRuntime().bindWithFlinkContainer(flinkContainer);
+        return new PulsarContainerRuntime(false).bindWithFlinkContainer(flinkContainer);
     }
 }

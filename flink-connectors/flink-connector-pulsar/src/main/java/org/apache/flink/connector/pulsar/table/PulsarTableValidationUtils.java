@@ -46,9 +46,7 @@ import static org.apache.flink.connector.pulsar.table.PulsarTableOptions.SOURCE_
 import static org.apache.flink.connector.pulsar.table.PulsarTableOptions.TOPICS;
 import static org.apache.pulsar.common.naming.TopicName.isValid;
 
-/**
- * Util class for source and sink validation rules. TODO refactor to use the PulsarConfigValidator
- */
+/** Util class for source and sink validation rules. */
 public class PulsarTableValidationUtils {
 
     private PulsarTableValidationUtils() {}
