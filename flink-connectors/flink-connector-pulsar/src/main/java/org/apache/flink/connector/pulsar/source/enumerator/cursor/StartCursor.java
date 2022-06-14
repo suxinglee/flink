@@ -57,7 +57,8 @@ public interface StartCursor extends Serializable {
 
     /**
      * Find the available message id and start consuming from it. The given message is included in
-     * the consuming result by default.
+     * the consuming result by default if you provide a specified message id instead of {@link
+     * MessageId#earliest} or {@link MessageId#latest}.
      */
     static StartCursor fromMessageId(MessageId messageId) {
         return fromMessageId(messageId, true);
@@ -65,7 +66,8 @@ public interface StartCursor extends Serializable {
 
     /**
      * @param messageId Find the available message id and start consuming from it.
-     * @param inclusive {@code true} would include the given message id.
+     * @param inclusive {@code true} would include the given message id if it's not the {@link
+     *     MessageId#earliest} or {@link MessageId#latest}.
      */
     static StartCursor fromMessageId(MessageId messageId, boolean inclusive) {
         return new MessageIdStartCursor(messageId, inclusive);

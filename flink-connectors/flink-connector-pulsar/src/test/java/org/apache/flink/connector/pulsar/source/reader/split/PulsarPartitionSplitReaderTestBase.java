@@ -24,7 +24,6 @@ import org.apache.flink.configuration.Configuration;
 import org.apache.flink.connector.base.source.reader.RecordsWithSplitIds;
 import org.apache.flink.connector.base.source.reader.splitreader.SplitsAddition;
 import org.apache.flink.connector.pulsar.source.config.SourceConfiguration;
-import org.apache.flink.connector.pulsar.source.enumerator.cursor.StartCursor;
 import org.apache.flink.connector.pulsar.source.enumerator.cursor.StopCursor;
 import org.apache.flink.connector.pulsar.source.enumerator.topic.TopicPartition;
 import org.apache.flink.connector.pulsar.source.reader.message.PulsarMessage;
@@ -139,8 +138,7 @@ public abstract class PulsarPartitionSplitReaderTestBase extends PulsarTestSuite
         try (Consumer<byte[]> consumer =
                 (Consumer<byte[]>) reader.createPulsarConsumer(partition)) {
             // inclusive messageId
-            StartCursor startCursor = StartCursor.fromMessageId(startPosition);
-            startCursor.seekPosition(partition.getTopic(), partition.getPartitionId(), consumer);
+            consumer.seek(startPosition);
         } catch (PulsarClientException e) {
             sneakyThrow(e);
         }

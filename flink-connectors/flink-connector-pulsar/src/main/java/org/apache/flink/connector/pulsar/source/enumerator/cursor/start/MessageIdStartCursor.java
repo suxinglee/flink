@@ -47,7 +47,9 @@ public class MessageIdStartCursor implements StartCursor {
      * code</a> for understanding pulsar internal logic.
      *
      * @param messageId The message id for start position.
-     * @param inclusive Should we include the start message id in consuming result.
+     * @param inclusive Should we include the start message id in consuming result. This is works
+     *     only if we provide a specified message id instead of {@link MessageId#earliest} or {@link
+     *     MessageId#latest}.
      */
     public MessageIdStartCursor(MessageId messageId, boolean inclusive) {
         MessageIdImpl id = MessageIdImpl.convertToMessageIdImpl(messageId);
@@ -67,7 +69,7 @@ public class MessageIdStartCursor implements StartCursor {
      * href="https://github.com/apache/pulsar/blob/7c8dc3201baad7d02d886dbc26db5c03abce77d6/managed-ledger/src/main/java/org/apache/bookkeeper/mledger/impl/PositionImpl.java#L85">this
      * code</a> to get the next message id.
      */
-    private MessageId getNext(MessageIdImpl messageId) {
+    public static MessageId getNext(MessageIdImpl messageId) {
         if (messageId.getEntryId() < 0) {
             return DefaultImplementation.getDefaultImplementation()
                     .newMessageId(messageId.getLedgerId(), 0, messageId.getPartitionIndex());

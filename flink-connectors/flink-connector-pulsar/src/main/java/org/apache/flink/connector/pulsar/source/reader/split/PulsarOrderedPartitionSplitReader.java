@@ -20,7 +20,7 @@ package org.apache.flink.connector.pulsar.source.reader.split;
 
 import org.apache.flink.annotation.Internal;
 import org.apache.flink.connector.pulsar.source.config.SourceConfiguration;
-import org.apache.flink.connector.pulsar.source.enumerator.cursor.StartCursor;
+import org.apache.flink.connector.pulsar.source.enumerator.cursor.start.MessageIdStartCursor;
 import org.apache.flink.connector.pulsar.source.enumerator.topic.TopicPartition;
 import org.apache.flink.connector.pulsar.source.reader.deserializer.PulsarDeserializationSchema;
 import org.apache.flink.connector.pulsar.source.reader.source.PulsarOrderedSourceReader;
@@ -32,6 +32,7 @@ import org.apache.pulsar.client.api.Message;
 import org.apache.pulsar.client.api.MessageId;
 import org.apache.pulsar.client.api.PulsarClient;
 import org.apache.pulsar.client.api.PulsarClientException;
+import org.apache.pulsar.client.impl.MessageIdImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -80,12 +81,19 @@ public class PulsarOrderedPartitionSplitReader<OUT> extends PulsarPartitionSplit
 
         // Reset the start position for ordered pulsar consumer.
         if (latestConsumedId != null) {
-            StartCursor startCursor = StartCursor.fromMessageId(latestConsumedId, false);
-            TopicPartition partition = split.getPartition();
-
+            LOG.debug("Start seeking from the checkpoint {}", latestConsumedId);
             try {
-                startCursor.seekPosition(
-                        partition.getTopic(), partition.getPartitionId(), consumer);
+                MessageId initialPosition;
+                if (latestConsumedId == MessageId.latest
+                        || latestConsumedId == MessageId.earliest) {
+                    initialPosition = latestConsumedId;
+                } else {
+                    MessageIdImpl messageId =
+                            MessageIdImpl.convertToMessageIdImpl(latestConsumedId);
+                    initialPosition = MessageIdStartCursor.getNext(messageId);
+                }
+
+                consumer.seek(initialPosition);
             } catch (PulsarClientException e) {
                 if (sourceConfiguration.getVerifyInitialOffsets() == FAIL_ON_MISMATCH) {
                     throw new IllegalArgumentException(e);
@@ -95,7 +103,7 @@ public class PulsarOrderedPartitionSplitReader<OUT> extends PulsarPartitionSplit
                     LOG.warn(
                             "Failed to reset cursor to {} on partition {}",
                             latestConsumedId,
-                            partition,
+                            split.getPartition(),
                             e);
                 }
             }
