@@ -27,9 +27,6 @@ import org.apache.flink.connector.base.source.reader.splitreader.SplitsChange;
 import org.apache.flink.connector.pulsar.source.config.SourceConfiguration;
 import org.apache.flink.connector.pulsar.source.enumerator.cursor.StopCursor;
 import org.apache.flink.connector.pulsar.source.enumerator.topic.TopicPartition;
-import org.apache.flink.connector.pulsar.source.reader.deserializer.PulsarDeserializationSchema;
-import org.apache.flink.connector.pulsar.source.reader.message.PulsarMessage;
-import org.apache.flink.connector.pulsar.source.reader.message.PulsarMessageCollector;
 import org.apache.flink.connector.pulsar.source.split.PulsarPartitionSplit;
 import org.apache.flink.util.Preconditions;
 
@@ -58,42 +55,36 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static org.apache.flink.connector.pulsar.common.utils.PulsarExceptionUtils.sneakyClient;
 import static org.apache.flink.connector.pulsar.source.config.PulsarSourceConfigUtils.createConsumerBuilder;
 
-/**
- * The common partition split reader.
- *
- * @param <OUT> the type of the pulsar source message that would be serialized to downstream.
- */
-abstract class PulsarPartitionSplitReaderBase<OUT>
-        implements SplitReader<PulsarMessage<OUT>, PulsarPartitionSplit> {
+/** The common partition split reader. */
+abstract class PulsarPartitionSplitReaderBase
+        implements SplitReader<Message<byte[]>, PulsarPartitionSplit> {
     private static final Logger LOG = LoggerFactory.getLogger(PulsarPartitionSplitReaderBase.class);
 
     protected final PulsarClient pulsarClient;
     protected final PulsarAdmin pulsarAdmin;
     protected final SourceConfiguration sourceConfiguration;
-    protected final PulsarDeserializationSchema<OUT> deserializationSchema;
     @Nullable protected final CryptoKeyReader cryptoKeyReader;
+
     protected final AtomicBoolean wakeup;
 
-    protected Consumer<?> pulsarConsumer;
+    protected Consumer<byte[]> pulsarConsumer;
     protected PulsarPartitionSplit registeredSplit;
 
     protected PulsarPartitionSplitReaderBase(
             PulsarClient pulsarClient,
             PulsarAdmin pulsarAdmin,
             SourceConfiguration sourceConfiguration,
-            PulsarDeserializationSchema<OUT> deserializationSchema,
             @Nullable CryptoKeyReader cryptoKeyReader) {
         this.pulsarClient = pulsarClient;
         this.pulsarAdmin = pulsarAdmin;
         this.sourceConfiguration = sourceConfiguration;
-        this.deserializationSchema = deserializationSchema;
         this.cryptoKeyReader = cryptoKeyReader;
         this.wakeup = new AtomicBoolean(false);
     }
 
     @Override
-    public RecordsWithSplitIds<PulsarMessage<OUT>> fetch() throws IOException {
-        RecordsBySplits.Builder<PulsarMessage<OUT>> builder = new RecordsBySplits.Builder<>();
+    public RecordsWithSplitIds<Message<byte[]>> fetch() throws IOException {
+        RecordsBySplits.Builder<Message<byte[]>> builder = new RecordsBySplits.Builder<>();
 
         // Return when no split registered to this reader.
         if (pulsarConsumer == null || registeredSplit == null) {
@@ -105,7 +96,6 @@ abstract class PulsarPartitionSplitReaderBase<OUT>
 
         StopCursor stopCursor = registeredSplit.getStopCursor();
         String splitId = registeredSplit.splitId();
-        PulsarMessageCollector<OUT> collector = new PulsarMessageCollector<>(splitId, builder);
         Deadline deadline = Deadline.fromNow(sourceConfiguration.getMaxFetchTime());
 
         // Consume message from pulsar until it was woken up by flink reader.
@@ -116,15 +106,12 @@ abstract class PulsarPartitionSplitReaderBase<OUT>
                 messageNum++) {
             try {
                 Duration timeout = deadline.timeLeftIfAny();
-                Message<?> message = pollMessage(timeout);
+                Message<byte[]> message = pollMessage(timeout);
                 if (message == null) {
                     break;
                 }
 
-                collector.setMessage(message);
-
-                // Deserialize message by DeserializationSchema or Pulsar Schema.
-                deserializationSchema.deserialize(message, collector);
+                builder.add(splitId, message);
 
                 // Acknowledge message if needed.
                 finishedPollMessage(message);
@@ -171,7 +158,7 @@ abstract class PulsarPartitionSplitReaderBase<OUT>
         PulsarPartitionSplit newSplit = newSplits.get(0);
 
         // Create pulsar consumer.
-        Consumer<?> consumer = createPulsarConsumer(newSplit);
+        Consumer<byte[]> consumer = createPulsarConsumer(newSplit);
 
         // Open start & stop cursor.
         newSplit.open(pulsarAdmin);
@@ -197,7 +184,7 @@ abstract class PulsarPartitionSplitReaderBase<OUT>
     }
 
     @Nullable
-    protected abstract Message<?> pollMessage(Duration timeout)
+    protected abstract Message<byte[]> pollMessage(Duration timeout)
             throws ExecutionException, InterruptedException, PulsarClientException;
 
     protected abstract void finishedPollMessage(Message<?> message);
@@ -210,19 +197,16 @@ abstract class PulsarPartitionSplitReaderBase<OUT>
         return !wakeup.get();
     }
 
-    /**
-     * Create a specified {@link Consumer} by the given split information. If using pulsar schema,
-     * then use the pulsar schema, if using flink schema, then use a Schema.BYTES
-     */
-    protected Consumer<?> createPulsarConsumer(PulsarPartitionSplit split) {
+    /** Create a specified {@link Consumer} by the given split information. */
+    protected Consumer<byte[]> createPulsarConsumer(PulsarPartitionSplit split) {
         return createPulsarConsumer(split.getPartition());
     }
 
-    protected Consumer<?> createPulsarConsumer(TopicPartition partition) {
-        Schema<?> schema = deserializationSchema.schema();
+    protected Consumer<byte[]> createPulsarConsumer(TopicPartition partition) {
+        // Schema<?> schema = deserializationSchema.schema();
 
-        ConsumerBuilder<?> consumerBuilder =
-                createConsumerBuilder(pulsarClient, schema, sourceConfiguration);
+        ConsumerBuilder<byte[]> consumerBuilder =
+                createConsumerBuilder(pulsarClient, Schema.BYTES, sourceConfiguration);
 
         consumerBuilder.topic(partition.getFullTopicName());
 
