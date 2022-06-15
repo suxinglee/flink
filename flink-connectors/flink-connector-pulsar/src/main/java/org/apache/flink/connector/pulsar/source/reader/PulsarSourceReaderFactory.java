@@ -25,7 +25,7 @@ import org.apache.flink.connector.base.source.reader.RecordsWithSplitIds;
 import org.apache.flink.connector.base.source.reader.synchronization.FutureCompletingBlockingQueue;
 import org.apache.flink.connector.pulsar.source.config.SourceConfiguration;
 import org.apache.flink.connector.pulsar.source.reader.deserializer.PulsarDeserializationSchema;
-import org.apache.flink.connector.pulsar.source.reader.message.PulsarMessage;
+import org.apache.flink.connector.pulsar.source.reader.emitter.PulsarRecordEmitter;
 import org.apache.flink.connector.pulsar.source.reader.source.PulsarOrderedSourceReader;
 import org.apache.flink.connector.pulsar.source.reader.source.PulsarUnorderedSourceReader;
 import org.apache.flink.connector.pulsar.source.reader.split.PulsarOrderedPartitionSplitReader;
@@ -34,6 +34,7 @@ import org.apache.flink.connector.pulsar.source.split.PulsarPartitionSplit;
 
 import org.apache.pulsar.client.admin.PulsarAdmin;
 import org.apache.pulsar.client.api.CryptoKeyReader;
+import org.apache.pulsar.client.api.Message;
 import org.apache.pulsar.client.api.PulsarClient;
 import org.apache.pulsar.client.api.SubscriptionType;
 import org.apache.pulsar.client.api.transaction.TransactionCoordinatorClient;
@@ -74,26 +75,28 @@ public final class PulsarSourceReaderFactory {
 
         // Create a message queue with the predefined source option.
         int queueCapacity = sourceConfiguration.getMessageQueueCapacity();
-        FutureCompletingBlockingQueue<RecordsWithSplitIds<PulsarMessage<OUT>>> elementsQueue =
+        FutureCompletingBlockingQueue<RecordsWithSplitIds<Message<byte[]>>> elementsQueue =
                 new FutureCompletingBlockingQueue<>(queueCapacity);
+
+        PulsarRecordEmitter<OUT> recordEmitter = new PulsarRecordEmitter<>(deserializationSchema);
 
         // Create different pulsar source reader by subscription type.
         SubscriptionType subscriptionType = sourceConfiguration.getSubscriptionType();
         if (subscriptionType == SubscriptionType.Failover
                 || subscriptionType == SubscriptionType.Exclusive) {
             // Create a ordered split reader supplier.
-            Supplier<PulsarOrderedPartitionSplitReader<OUT>> splitReaderSupplier =
+            Supplier<PulsarOrderedPartitionSplitReader> splitReaderSupplier =
                     () ->
-                            new PulsarOrderedPartitionSplitReader<>(
+                            new PulsarOrderedPartitionSplitReader(
                                     pulsarClient,
                                     pulsarAdmin,
                                     sourceConfiguration,
-                                    deserializationSchema,
                                     cryptoKeyReader);
 
             return new PulsarOrderedSourceReader<>(
                     elementsQueue,
                     splitReaderSupplier,
+                    recordEmitter,
                     readerContext,
                     sourceConfiguration,
                     pulsarClient,
@@ -107,19 +110,19 @@ public final class PulsarSourceReaderFactory {
                 throw new IllegalStateException("Transaction is required but didn't enabled");
             }
 
-            Supplier<PulsarUnorderedPartitionSplitReader<OUT>> splitReaderSupplier =
+            Supplier<PulsarUnorderedPartitionSplitReader> splitReaderSupplier =
                     () ->
-                            new PulsarUnorderedPartitionSplitReader<>(
+                            new PulsarUnorderedPartitionSplitReader(
                                     pulsarClient,
                                     pulsarAdmin,
                                     sourceConfiguration,
-                                    deserializationSchema,
                                     cryptoKeyReader,
                                     coordinatorClient);
 
             return new PulsarUnorderedSourceReader<>(
                     elementsQueue,
                     splitReaderSupplier,
+                    recordEmitter,
                     readerContext,
                     sourceConfiguration,
                     pulsarClient,
