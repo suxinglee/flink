@@ -95,17 +95,7 @@ public class PulsarUnorderedPartitionSplitReader extends PulsarPartitionSplitRea
                         .acknowledgeAsync(message.getMessageId(), uncommittedTransaction)
                         .get();
             } catch (InterruptedException e) {
-                sneakyClient(
-                        () ->
-                                pulsarConsumer.reconsumeLater(
-                                        message, REDELIVER_TIME.toMillis(), TimeUnit.MILLISECONDS));
                 Thread.currentThread().interrupt();
-                throw e;
-            } catch (ExecutionException e) {
-                sneakyClient(
-                        () ->
-                                pulsarConsumer.reconsumeLater(
-                                        message, REDELIVER_TIME.toMillis(), TimeUnit.MILLISECONDS));
                 throw e;
             }
         }
