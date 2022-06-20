@@ -57,7 +57,7 @@ public class PulsarMessageBuilder<T> {
      */
     public PulsarMessageBuilder<T> key(String key) {
         this.key = checkNotNull(key);
-        return null;
+        return this;
     }
 
     /**
@@ -66,7 +66,7 @@ public class PulsarMessageBuilder<T> {
      */
     public PulsarMessageBuilder<T> keyBytes(byte[] keyBytes) {
         this.keyBytes = checkNotNull(keyBytes);
-        return null;
+        return this;
     }
 
     /** Method wrapper of {@link TypedMessageBuilder#eventTime(long)}. */
