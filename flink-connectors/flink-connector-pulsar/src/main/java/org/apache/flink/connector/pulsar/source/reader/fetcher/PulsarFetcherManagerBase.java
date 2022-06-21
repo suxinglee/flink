@@ -75,7 +75,7 @@ public abstract class PulsarFetcherManagerBase
 
     /** Close the finished split related fetcher. */
     public void closeFetcher(String splitId) {
-        SplitFetcher<PulsarMessage<T>, PulsarPartitionSplit> fetcher = getOrCreateFetcher(splitId);
+        SplitFetcher<Message<byte[]>, PulsarPartitionSplit> fetcher = getOrCreateFetcher(splitId);
         fetcher.shutdown();
     }
 
