@@ -75,7 +75,7 @@ abstract class PulsarSourceReaderBase<OUT>
 
     protected void closeFinishedSplits(Set<String> finishedSplitIds) {
         for (String splitId : finishedSplitIds) {
-            ((PulsarFetcherManagerBase<OUT>) splitFetcherManager).closeFetcher(splitId);
+            ((PulsarFetcherManagerBase) splitFetcherManager).closeFetcher(splitId);
         }
     }
 

@@ -75,7 +75,7 @@ public final class TopicNameUtils {
         return TopicName.get(topic).getPartition(partitionId).toString();
     }
 
-    public static boolean isPartition(String topic) {
+    public static boolean isPartitioned(String topic) {
         return TopicName.get(topic).isPartitioned();
     }
 
