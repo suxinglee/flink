@@ -25,23 +25,21 @@ import org.apache.flink.types.Row;
 import org.apache.flink.shaded.guava30.com.google.common.collect.Iterables;
 import org.apache.flink.shaded.guava30.com.google.common.collect.Sets;
 
-import org.apache.commons.io.IOUtils;
 import org.apache.pulsar.client.admin.PulsarAdminException;
-import org.apache.pulsar.client.api.Consumer;
 import org.apache.pulsar.client.api.Message;
-import org.apache.pulsar.client.api.PulsarClient;
 import org.apache.pulsar.client.api.Schema;
-import org.apache.pulsar.client.api.SubscriptionInitialPosition;
 import org.apache.pulsar.common.naming.TopicName;
 import org.apache.pulsar.common.policies.data.TenantInfo;
 import org.apache.pulsar.shade.org.apache.commons.lang3.RandomStringUtils;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -49,17 +47,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
-import static org.apache.commons.lang3.RandomStringUtils.randomAlphabetic;
 import static org.apache.flink.connector.pulsar.table.catalog.PulsarCatalogFactory.CATALOG_CONFIG_VALIDATOR;
 import static org.apache.flink.connector.pulsar.table.testutils.PulsarTableTestUtils.collectRows;
 import static org.apache.flink.connector.pulsar.table.testutils.SchemaData.INTEGER_LIST;
+import static org.apache.flink.connector.pulsar.table.testutils.TestingUser.createRandomUser;
+import static org.apache.flink.connector.pulsar.table.testutils.TestingUser.createUser;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.assertThatNoException;
@@ -67,6 +64,9 @@ import static org.assertj.core.api.Assertions.assertThatNoException;
 /** Unit test for {@link PulsarCatalog}. */
 public class PulsarCatalogITTest extends PulsarTableTestBase {
     private static final Logger LOGGER = LoggerFactory.getLogger(PulsarCatalogITTest.class);
+
+    private static final String AVRO_FORMAT = "avro";
+    private static final String JSON_FORMAT = "json";
 
     private static final String INMEMORY_CATALOG = "inmemorycatalog";
     private static final String PULSAR_CATALOG1 = "pulsarcatalog1";
@@ -514,11 +514,14 @@ public class PulsarCatalogITTest extends PulsarTableTestBase {
         // TODO implement after protobuf native schema support
     }
 
-    @Test
-    void readFromNativeTableWithJsonSchema() throws Exception {
+    // TODO we didn't create the topic, how can we send to it ?
+    @ParameterizedTest
+    @MethodSource("provideAvroBasedSchemaData")
+    void readFromNativeTableWithAvroBasedSchema(String format, Schema<TestingUser> schema)
+            throws Exception {
         String topicName = newTopicName();
         TestingUser expectedUser = createRandomUser();
-        pulsar.operator().sendMessage(topicName, Schema.JSON(TestingUser.class), expectedUser);
+        pulsar.operator().sendMessage(topicName, schema, expectedUser);
 
         tableEnv.useCatalog(PULSAR_CATALOG1);
         tableEnv.useDatabase(PULSAR1_DB);
@@ -536,20 +539,40 @@ public class PulsarCatalogITTest extends PulsarTableTestBase {
                                 Row.of(expectedUser.getAge(), expectedUser.getName())));
     }
 
-    @Test
-    void readFromNativeTableWithAvroSchema() throws Exception {
+    @ParameterizedTest
+    @MethodSource("provideAvroBasedSchemaData")
+    void readFromExplicitTableWithAvroBasedSchema(String format, Schema<TestingUser> schema)
+            throws Exception {
+        // TODO add this test
+        String databaseName = newDatabaseName();
         String topicName = newTopicName();
         TestingUser expectedUser = createRandomUser();
-        pulsar.operator().sendMessage(topicName, Schema.AVRO(TestingUser.class), expectedUser);
+        pulsar.operator().sendMessage(topicName, schema, expectedUser);
 
         tableEnv.useCatalog(PULSAR_CATALOG1);
-        tableEnv.useDatabase(PULSAR1_DB);
+
+        String dbDDL = "CREATE DATABASE " + databaseName;
+        tableEnv.executeSql(dbDDL).print();
+        tableEnv.useDatabase(databaseName);
+
+        String sourceTableDDL =
+                String.format(
+                        "CREATE TABLE %s (\n"
+                                + "  age INT,\n"
+                                + "  name STRING\n"
+                                + ") with (\n"
+                                + "   'connector' = 'pulsar',\n"
+                                + "   'topics' = '%s',\n"
+                                + "   'format' = '%s'\n"
+                                + ")",
+                        topicName, topicName, format);
+        tableEnv.executeSql(sourceTableDDL).await();
 
         final List<Row> result =
                 collectRows(
                         tableEnv.sqlQuery(
                                 String.format(
-                                        "select * from %s",
+                                        "select * from %s ",
                                         TopicName.get(topicName).getLocalName())),
                         1);
         assertThat(result)
@@ -600,7 +623,6 @@ public class PulsarCatalogITTest extends PulsarTableTestBase {
     }
 
     @Test
-    @Disabled("Disabled due to streamnative/flink#100")
     void copyDataFromNativeTableToNativeTable() throws Exception {
         String sourceTopic = newTopicName();
         String sourceTableName = TopicName.get(sourceTopic).getLocalName();
@@ -614,68 +636,21 @@ public class PulsarCatalogITTest extends PulsarTableTestBase {
         tableEnv.useCatalog(PULSAR_CATALOG1);
         tableEnv.useDatabase(PULSAR1_DB);
         String insertQ =
-                String.format(
-                        "INSERT INTO %s" + " SELECT * FROM %s", sinkTableName, sourceTableName);
+                String.format("INSERT INTO %s SELECT * FROM %s", sinkTableName, sourceTableName);
 
-        tableEnv.executeSql(insertQ).await();
-        List<Integer> result = consumeMessage(sinkTableName, Schema.INT32, INTEGER_LIST.size(), 10);
-        assertThat(result).containsExactlyElementsOf(INTEGER_LIST);
-
-        //        final List<Row> result =
-        //                collectRows(
-        //                        tableEnv.sqlQuery("SELECT * FROM " + sinkTableName),
-        //                        INTEGER_LIST.size());
-        //
-        //        assertThat(result)
-        //                .containsExactlyElementsOf(
-        //                        INTEGER_LIST.stream().map(Row::of).collect(Collectors.toList()));
-    }
-
-    @Test
-    void writeToExplicitTableAndReadWithAvroSchema() throws Exception {
-        String databaseName = newDatabaseName();
-        String tableSinkTopic = newTopicName();
-        String tableSinkName = TopicName.get(tableSinkTopic).getLocalName();
-
-        pulsar.operator().createTopic(tableSinkTopic, 1);
-        tableEnv.useCatalog(PULSAR_CATALOG1);
-
-        String dbDDL = "CREATE DATABASE " + databaseName;
-        tableEnv.executeSql(dbDDL).print();
-        tableEnv.executeSql("USE " + databaseName);
-
-        String sinkDDL =
-                String.format(
-                        "CREATE TABLE %s (\n"
-                                + "  oid STRING,\n"
-                                + "  totalprice INT,\n"
-                                + "  customerid STRING\n"
-                                + ") with (\n"
-                                + "   'connector' = 'pulsar',\n"
-                                + "   'topics' = '%s',"
-                                + "   'format' = 'avro'\n"
-                                + ")",
-                        tableSinkName, tableSinkTopic);
-        String insertQ =
-                String.format(
-                        "INSERT INTO %s"
-                                + " VALUES\n"
-                                + "  ('oid1', 10, 'cid1'),\n"
-                                + "  ('oid2', 20, 'cid2'),\n"
-                                + "  ('oid3', 30, 'cid3'),\n"
-                                + "  ('oid4', 10, 'cid4')",
-                        tableSinkName);
-
-        tableEnv.executeSql(sinkDDL).print();
         tableEnv.executeSql(insertQ);
-
-        final List<Row> result =
-                collectRows(tableEnv.sqlQuery(String.format("SELECT * FROM %s", tableSinkName)), 4);
-        assertThat(result).hasSize(4);
+        List<Integer> result =
+                pulsar.operator().receiveMessages(sinkTopic, Schema.INT32, INTEGER_LIST.size())
+                        .stream()
+                        .map(Message::getValue)
+                        .collect(Collectors.toList());
+        assertThat(result).containsExactlyElementsOf(INTEGER_LIST);
     }
 
-    @Test
-    void writeToExplicitTableAndReadWithJsonSchema() throws Exception {
+    @ParameterizedTest
+    @MethodSource("provideAvroBasedSchemaData")
+    void writeToExplicitTableAndReadWithAvroBasedSchema(String format, Schema<TestingUser> schema)
+            throws Exception {
         String databaseName = newDatabaseName();
         String tableSinkTopic = newTopicName();
         String tableSinkName = TopicName.get(tableSinkTopic).getLocalName();
@@ -685,7 +660,7 @@ public class PulsarCatalogITTest extends PulsarTableTestBase {
 
         String dbDDL = "CREATE DATABASE " + databaseName;
         tableEnv.executeSql(dbDDL).print();
-        tableEnv.executeSql("USE " + databaseName + "");
+        tableEnv.useDatabase(databaseName);
 
         String sinkDDL =
                 String.format(
@@ -696,9 +671,9 @@ public class PulsarCatalogITTest extends PulsarTableTestBase {
                                 + ") with (\n"
                                 + "   'connector' = 'pulsar',\n"
                                 + "   'topics' = '%s',\n"
-                                + "   'format' = 'json'\n"
+                                + "   'format' = '%s'\n"
                                 + ")",
-                        tableSinkName, tableSinkTopic);
+                        tableSinkName, tableSinkTopic, format);
         tableEnv.executeSql(sinkDDL).await();
 
         String insertQ =
@@ -717,44 +692,66 @@ public class PulsarCatalogITTest extends PulsarTableTestBase {
         assertThat(result).hasSize(4);
     }
 
-    @Test
-    void writeToNativeTableAndReadWithJsonSchema() throws Exception {
+    @ParameterizedTest
+    @MethodSource("provideAvroBasedSchemaData")
+    @Disabled("flink-128")
+    void writeToExplicitTableAndReadWithAvroBasedSchemaUsingPulsarConsumer(
+            String format, Schema<TestingUser> schema) throws Exception {
+        String databaseName = newDatabaseName();
         String tableSinkTopic = newTopicName();
+        String tableSinkName = TopicName.get(tableSinkTopic).getLocalName();
 
         pulsar.operator().createTopic(tableSinkTopic, 1);
-        pulsar.operator()
-                .admin()
-                .schemas()
-                .createSchema(tableSinkTopic, Schema.JSON(TestingUser.class).getSchemaInfo());
         tableEnv.useCatalog(PULSAR_CATALOG1);
-        tableEnv.useDatabase(PULSAR1_DB);
+
+        String dbDDL = "CREATE DATABASE " + databaseName;
+        tableEnv.executeSql(dbDDL).print();
+        tableEnv.executeSql("USE " + databaseName + "");
+
+        String sinkDDL =
+                String.format(
+                        "CREATE TABLE %s (\n"
+                                + "  name STRING,\n"
+                                + "  age INT\n"
+                                + ") with (\n"
+                                + "   'connector' = 'pulsar',\n"
+                                + "   'topics' = '%s',\n"
+                                + "   'format' = '%s'\n"
+                                + ")",
+                        tableSinkName, tableSinkTopic, format);
+        tableEnv.executeSql(sinkDDL).await();
 
         String insertQ =
                 String.format(
                         "INSERT INTO %s"
                                 + " VALUES\n"
-                                + "  (1, 'abc'),\n"
-                                + "  (2, 'bcd'),\n"
-                                + "  (3, 'cde'),\n"
-                                + "  (4, 'def')",
-                        tableSinkTopic);
+                                + "  ('oid1', 10),\n"
+                                + "  ('oid2', 20),\n"
+                                + "  ('oid3', 30),\n"
+                                + "  ('oid4', 10)",
+                        tableSinkName);
         tableEnv.executeSql(insertQ).await();
 
-        final List<Row> result =
-                collectRows(
-                        tableEnv.sqlQuery(String.format("SELECT * FROM %s", tableSinkTopic)), 4);
-        assertThat(result).hasSize(4);
+        List<TestingUser> sinkResult =
+                pulsar.operator().receiveMessages(tableSinkTopic, schema, 4).stream()
+                        .map(Message::getValue)
+                        .collect(Collectors.toList());
+        assertThat(sinkResult)
+                .containsExactly(
+                        createUser("oid1", 10),
+                        createUser("oid2", 20),
+                        createUser("oid3", 30),
+                        createUser("oid4", 40));
     }
 
-    @Test
-    void writeToNativeTableAndReadWithAvroSchema() throws Exception {
+    @ParameterizedTest
+    @MethodSource("provideAvroBasedSchemaData")
+    void writeToNativeTableAndReadWithAvroBasedSchema(String format, Schema<TestingUser> schema)
+            throws Exception {
         String tableSinkTopic = newTopicName();
 
         pulsar.operator().createTopic(tableSinkTopic, 1);
-        pulsar.operator()
-                .admin()
-                .schemas()
-                .createSchema(tableSinkTopic, Schema.AVRO(TestingUser.class).getSchemaInfo());
+        pulsar.operator().admin().schemas().createSchema(tableSinkTopic, schema.getSchemaInfo());
         tableEnv.useCatalog(PULSAR_CATALOG1);
         tableEnv.useDatabase(PULSAR1_DB);
 
@@ -833,6 +830,36 @@ public class PulsarCatalogITTest extends PulsarTableTestBase {
         assertThat(result).hasSize(4);
     }
 
+    @Test
+    void writeToNativeTableAndReadWithIntegerSchemaUsingValueField() throws Exception {
+        String tableSinkTopic = newTopicName();
+
+        pulsar.operator().createTopic(tableSinkTopic, 1);
+        pulsar.operator()
+                .admin()
+                .schemas()
+                .createSchema(tableSinkTopic, Schema.INT32.getSchemaInfo());
+        tableEnv.useCatalog(PULSAR_CATALOG1);
+        tableEnv.useDatabase(PULSAR1_DB);
+
+        String insertQ =
+                String.format(
+                        "INSERT INTO %s"
+                                + " VALUES\n"
+                                + "  (1),\n"
+                                + "  (2),\n"
+                                + "  (3),\n"
+                                + "  (4)",
+                        tableSinkTopic);
+        tableEnv.executeSql(insertQ).await();
+
+        final List<Row> result =
+                collectRows(
+                        tableEnv.sqlQuery(String.format("SELECT `value` FROM %s", tableSinkTopic)),
+                        4);
+        assertThat(result).hasSize(4);
+    }
+
     // utils
     private void registerCatalogs(TableEnvironment tableEnvironment) {
         tableEnvironment.registerCatalog(
@@ -870,42 +897,10 @@ public class PulsarCatalogITTest extends PulsarTableTestBase {
         return RandomStringUtils.randomAlphabetic(5);
     }
 
-    private TestingUser createRandomUser() {
-        TestingUser user = new TestingUser();
-        user.setName(randomAlphabetic(5));
-        user.setAge(ThreadLocalRandom.current().nextInt(0, Integer.MAX_VALUE));
-        return user;
-    }
-
-    private <T> List<T> consumeMessage(String topic, Schema<T> schema, int count, int timeout)
-            throws InterruptedException, ExecutionException, TimeoutException {
-        final PulsarClient pulsarClient = pulsar.operator().client();
-        return CompletableFuture.supplyAsync(
-                        () -> {
-                            Consumer<T> consumer = null;
-                            try {
-                                consumer =
-                                        pulsarClient
-                                                .newConsumer(schema)
-                                                .topic(topic)
-                                                .subscriptionInitialPosition(
-                                                        SubscriptionInitialPosition.Earliest)
-                                                .subscriptionName("test")
-                                                .subscribe();
-                                List<T> result = new ArrayList<>(count);
-                                for (int i = 0; i < count; i++) {
-                                    final Message<T> message = consumer.receive();
-                                    result.add(message.getValue());
-                                    consumer.acknowledge(message);
-                                }
-                                consumer.close();
-                                return result;
-                            } catch (Exception e) {
-                                throw new IllegalStateException(e);
-                            } finally {
-                                IOUtils.closeQuietly(consumer, i -> {});
-                            }
-                        })
-                .get(timeout, TimeUnit.SECONDS);
+    private static Stream<Arguments> provideAvroBasedSchemaData() {
+        return Stream.of(
+                Arguments.of(AVRO_FORMAT, Schema.AVRO(TestingUser.class))
+                //                Arguments.of(JSON_FORMAT, Schema.JSON(TestingUser.class))
+                );
     }
 }

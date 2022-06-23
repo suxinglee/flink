@@ -18,14 +18,21 @@
 
 package org.apache.flink.connector.pulsar.table;
 
+import org.apache.flink.connector.pulsar.table.testutils.TestingUser;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.functions.sink.SinkFunction;
+import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.test.junit5.MiniClusterExtension;
 import org.apache.flink.test.util.SuccessException;
 import org.apache.flink.types.Row;
 
+import org.apache.pulsar.client.api.Message;
+import org.apache.pulsar.client.api.Schema;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 
 import java.time.LocalDateTime;
@@ -33,9 +40,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Stream;
 
+import static org.apache.commons.lang3.RandomStringUtils.randomAlphabetic;
 import static org.apache.commons.lang3.RandomStringUtils.randomAlphanumeric;
 import static org.apache.flink.connector.pulsar.table.testutils.PulsarTableTestUtils.collectRows;
+import static org.apache.flink.connector.pulsar.table.testutils.TestingUser.createRandomUser;
 import static org.apache.flink.util.CollectionUtil.entry;
 import static org.apache.flink.util.CollectionUtil.map;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -50,20 +60,21 @@ public class PulsarTableITCase extends PulsarTableTestBase {
     private static final String JSON_FORMAT = "json";
     private static final String AVRO_FORMAT = "avro";
     private static final String CSV_FORMAT = "csv";
+    private static final String RAW_FORMAT = "raw";
 
     @ParameterizedTest
-    @ValueSource(strings = {JSON_FORMAT})
-    public void pulsarSourceSink(String format) throws Exception {
+    @ValueSource(strings = {JSON_FORMAT, AVRO_FORMAT, CSV_FORMAT})
+    void pulsarSourceSink(String format) throws Exception {
         // we always use a different topic name for each parameterized topic,
         // in order to make sure the topic can be created.
         final String topic = "test_topic_" + format + randomAlphanumeric(3);
         createTestTopic(topic, 1);
 
         // ---------- Produce an event time stream into Pulsar -------------------
-
+        String randomTableName = randomAlphabetic(5);
         final String createTable =
                 String.format(
-                        "create table pulsar_source_sink (\n"
+                        "create table %s (\n"
                                 + "  `computed-price` as price + 1.0,\n"
                                 + "  price decimal(38, 18),\n"
                                 + "  currency string,\n"
@@ -77,39 +88,44 @@ public class PulsarTableITCase extends PulsarTableTestBase {
                                 + "  'topics' = '%s',\n"
                                 + "  'service-url' = '%s',\n"
                                 + "  'admin-url' = '%s',\n"
-                                + "  %s\n"
+                                + "  'format' = '%s'\n"
                                 + ")",
+                        randomTableName,
                         PulsarTableFactory.IDENTIFIER,
                         topic,
                         pulsar.operator().serviceUrl(),
                         pulsar.operator().adminUrl(),
-                        formatOptions(format));
+                        format);
 
         tableEnv.executeSql(createTable);
 
         String initialValues =
-                "INSERT INTO pulsar_source_sink\n"
-                        + "SELECT CAST(price AS DECIMAL(10, 2)), currency, "
-                        + " CAST(d AS DATE), CAST(t AS TIME(0)), CAST(ts AS TIMESTAMP(3))\n"
-                        + "FROM (VALUES (2.02,'Euro','2019-12-12', '00:00:01', '2019-12-12 00:00:01.001001'), \n"
-                        + "  (1.11,'US Dollar','2019-12-12', '00:00:02', '2019-12-12 00:00:02.002001'), \n"
-                        + "  (50,'Yen','2019-12-12', '00:00:03', '2019-12-12 00:00:03.004001'), \n"
-                        + "  (3.1,'Euro','2019-12-12', '00:00:04', '2019-12-12 00:00:04.005001'), \n"
-                        + "  (5.33,'US Dollar','2019-12-12', '00:00:05', '2019-12-12 00:00:05.006001'), \n"
-                        + "  (0,'DUMMY','2019-12-12', '00:00:10', '2019-12-12 00:00:10'))\n"
-                        + "  AS orders (price, currency, d, t, ts)";
+                String.format(
+                        "INSERT INTO %s\n"
+                                + "SELECT CAST(price AS DECIMAL(10, 2)), currency, "
+                                + " CAST(d AS DATE), CAST(t AS TIME(0)), CAST(ts AS TIMESTAMP(3))\n"
+                                + "FROM (VALUES (2.02,'Euro','2019-12-12', '00:00:01', '2019-12-12 00:00:01.001001'), \n"
+                                + "  (1.11,'US Dollar','2019-12-12', '00:00:02', '2019-12-12 00:00:02.002001'), \n"
+                                + "  (50,'Yen','2019-12-12', '00:00:03', '2019-12-12 00:00:03.004001'), \n"
+                                + "  (3.1,'Euro','2019-12-12', '00:00:04', '2019-12-12 00:00:04.005001'), \n"
+                                + "  (5.33,'US Dollar','2019-12-12', '00:00:05', '2019-12-12 00:00:05.006001'), \n"
+                                + "  (0,'DUMMY','2019-12-12', '00:00:10', '2019-12-12 00:00:10'))\n"
+                                + "  AS orders (price, currency, d, t, ts)",
+                        randomTableName);
         tableEnv.executeSql(initialValues).await();
 
         String query =
-                "SELECT\n"
-                        + "  CAST(TUMBLE_END(ts, INTERVAL '5' SECOND) AS VARCHAR),\n"
-                        + "  CAST(MAX(log_date) AS VARCHAR),\n"
-                        + "  CAST(MAX(log_time) AS VARCHAR),\n"
-                        + "  CAST(MAX(ts) AS VARCHAR),\n"
-                        + "  COUNT(*),\n"
-                        + "  CAST(MAX(price) AS DECIMAL(10, 2))\n"
-                        + "FROM pulsar_source_sink\n"
-                        + "GROUP BY TUMBLE(ts, INTERVAL '5' SECOND)";
+                String.format(
+                        "SELECT\n"
+                                + "  CAST(TUMBLE_END(ts, INTERVAL '5' SECOND) AS VARCHAR),\n"
+                                + "  CAST(MAX(log_date) AS VARCHAR),\n"
+                                + "  CAST(MAX(log_time) AS VARCHAR),\n"
+                                + "  CAST(MAX(ts) AS VARCHAR),\n"
+                                + "  COUNT(*),\n"
+                                + "  CAST(MAX(price) AS DECIMAL(10, 2))\n"
+                                + "FROM %s\n"
+                                + "GROUP BY TUMBLE(ts, INTERVAL '5' SECOND)",
+                        randomTableName);
 
         DataStream<Row> result = tableEnv.toDataStream(tableEnv.sqlQuery(query));
         TestingSinkFunction sink = new TestingSinkFunction(2);
@@ -133,8 +149,8 @@ public class PulsarTableITCase extends PulsarTableTestBase {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {JSON_FORMAT})
-    public void pulsarSourceSinkWithKeyAndPartialValue(String format) throws Exception {
+    @ValueSource(strings = {JSON_FORMAT, CSV_FORMAT})
+    void pulsarSourceSinkWithKeyAndPartialValue(String format) throws Exception {
         // we always use a different topic name for each parameterized topic,
         // in order to make sure the topic can be created.
         final String topic = "key_partial_value_topic_" + format + randomAlphanumeric(3);
@@ -144,9 +160,10 @@ public class PulsarTableITCase extends PulsarTableTestBase {
 
         // k_user_id and user_id have different data types to verify the correct mapping,
         // fields are reordered on purpose
+        String randomTableName = randomAlphabetic(5);
         final String createTable =
                 String.format(
-                        "CREATE TABLE pulsar_key_value (\n"
+                        "CREATE TABLE %s (\n"
                                 + "  `user_id` BIGINT,\n"
                                 + "  `name` STRING,\n"
                                 + "  `event_id` BIGINT,\n"
@@ -160,6 +177,7 @@ public class PulsarTableITCase extends PulsarTableTestBase {
                                 + "  'key.format' = '%s',\n"
                                 + "  'key.fields' = 'user_id; event_id'\n"
                                 + ")",
+                        randomTableName,
                         PulsarTableFactory.IDENTIFIER,
                         topic,
                         pulsar.operator().serviceUrl(),
@@ -170,15 +188,18 @@ public class PulsarTableITCase extends PulsarTableTestBase {
         tableEnv.executeSql(createTable);
 
         String initialValues =
-                "INSERT INTO pulsar_key_value\n"
-                        + "VALUES\n"
-                        + " (1, 'name 1', 100, 'payload 1'),\n"
-                        + " (2, 'name 2', 101, 'payload 2'),\n"
-                        + " (3, 'name 3', 102, 'payload 3')";
+                String.format(
+                        "INSERT INTO %s\n"
+                                + "VALUES\n"
+                                + " (1, 'name 1', 100, 'payload 1'),\n"
+                                + " (2, 'name 2', 101, 'payload 2'),\n"
+                                + " (3, 'name 3', 102, 'payload 3')",
+                        randomTableName);
         tableEnv.executeSql(initialValues).await();
 
         final List<Row> result =
-                collectRows(tableEnv.sqlQuery("SELECT * FROM pulsar_key_value"), 3);
+                collectRows(
+                        tableEnv.sqlQuery(String.format("SELECT * FROM %s", randomTableName)), 3);
 
         assertThat(result)
                 .containsExactlyInAnyOrder(
@@ -188,19 +209,19 @@ public class PulsarTableITCase extends PulsarTableTestBase {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {JSON_FORMAT})
-    public void pulsarSourceSinkWithMetadata(String format) throws Exception {
+    @ValueSource(strings = {JSON_FORMAT, AVRO_FORMAT, CSV_FORMAT})
+    void pulsarSourceSinkWithMetadata(String format) throws Exception {
         // we always use a different topic name for each parameterized topic,
         // in order to make sure the topic can be created.
         final String topic = "metadata_topic_" + format + randomAlphanumeric(3);
         createTestTopic(topic, 1);
 
+        String randomTableName = randomAlphabetic(5);
         final String createTable =
                 String.format(
-                        "CREATE TABLE pulsar_metadata (\n"
+                        "CREATE TABLE %s (\n"
                                 + "  `physical_1` STRING,\n"
                                 + "  `physical_2` INT,\n"
-                                + "  `message_size` INT METADATA VIRTUAL,\n"
                                 + "  `event_time` TIMESTAMP(3) METADATA,\n"
                                 + "  `properties` MAP<STRING, STRING> METADATA,\n"
                                 + "  `physical_3` BOOLEAN\n"
@@ -212,6 +233,7 @@ public class PulsarTableITCase extends PulsarTableTestBase {
                                 + "  'pulsar.producer.producerName' = 'pulsar-table-test',\n"
                                 + "  'format' = '%s'\n"
                                 + ")",
+                        randomTableName,
                         PulsarTableFactory.IDENTIFIER,
                         topic,
                         pulsar.operator().serviceUrl(),
@@ -220,39 +242,203 @@ public class PulsarTableITCase extends PulsarTableTestBase {
         tableEnv.executeSql(createTable);
 
         String initialValues =
-                "INSERT INTO pulsar_metadata\n"
-                        + "VALUES\n"
-                        + " ('data 1', 1, TIMESTAMP '2022-03-24 13:12:11.123', MAP['k1', 'C0FFEE', 'k2', 'BABE01'], TRUE),\n"
-                        + " ('data 2', 2, TIMESTAMP '2022-03-25 13:12:11.123', CAST(NULL AS MAP<STRING, BYTES>), FALSE),\n"
-                        + " ('data 3', 3, TIMESTAMP '2022-03-26 13:12:11.123', MAP['k1', 'C0FFEE', 'k2', 'BABE01'], TRUE)";
+                String.format(
+                        "INSERT INTO %s\n"
+                                + "VALUES\n"
+                                + " ('data 1', 1, TIMESTAMP '2022-03-24 13:12:11.123', MAP['k1', 'C0FFEE', 'k2', 'BABE01'], TRUE),\n"
+                                + " ('data 2', 2, TIMESTAMP '2022-03-25 13:12:11.123', CAST(NULL AS MAP<STRING, BYTES>), FALSE),\n"
+                                + " ('data 3', 3, TIMESTAMP '2022-03-26 13:12:11.123', MAP['k1', 'C0FFEE', 'k2', 'BABE01'], TRUE)",
+                        randomTableName);
         tableEnv.executeSql(initialValues).await();
 
         // ---------- Consume stream from Pulsar -------------------
 
-        final List<Row> result = collectRows(tableEnv.sqlQuery("SELECT * FROM pulsar_metadata"), 3);
+        final List<Row> result =
+                collectRows(
+                        tableEnv.sqlQuery(String.format("SELECT * FROM %s", randomTableName)), 3);
         assertThat(result)
                 .containsExactlyInAnyOrder(
                         Row.of(
                                 "data 1",
                                 1,
-                                56,
                                 LocalDateTime.parse("2022-03-24T13:12:11.123"),
                                 map(entry("k1", "C0FFEE"), entry("k2", "BABE01")),
                                 true),
                         Row.of(
                                 "data 2",
                                 2,
-                                57,
                                 LocalDateTime.parse("2022-03-25T13:12:11.123"),
                                 Collections.emptyMap(),
                                 false),
                         Row.of(
                                 "data 3",
                                 3,
-                                56,
                                 LocalDateTime.parse("2022-03-26T13:12:11.123"),
                                 map(entry("k1", "C0FFEE"), entry("k2", "BABE01")),
                                 true));
+    }
+
+    // TODO split this into two tests
+    @ParameterizedTest
+    @MethodSource("provideSchemaData")
+    <T> void readAndSelectIntoTableUsingSimpleSchema(
+            String format, Schema<T> schema, T value, String flinkTableDataType) throws Exception {
+        final String sourceTopic = "source_topic_" + randomAlphanumeric(3);
+        createTestTopic(sourceTopic, 1);
+        pulsar.operator().sendMessage(sourceTopic, schema, value);
+
+        String sourceTableName = randomAlphabetic(5);
+        final String createSourceTable =
+                String.format(
+                        "create table %s (\n"
+                                + "  `field_1` %s\n"
+                                + ") with (\n"
+                                + "  'connector' = '%s',\n"
+                                + "  'topics' = '%s',\n"
+                                + "  'service-url' = '%s',\n"
+                                + "  'admin-url' = '%s',\n"
+                                + "  'format' = '%s'\n"
+                                + ")",
+                        sourceTableName,
+                        flinkTableDataType,
+                        PulsarTableFactory.IDENTIFIER,
+                        sourceTopic,
+                        pulsar.operator().serviceUrl(),
+                        pulsar.operator().adminUrl(),
+                        format);
+
+        tableEnv.executeSql(createSourceTable);
+        final List<Row> result =
+                collectRows(
+                        tableEnv.sqlQuery(String.format("SELECT * FROM %s", sourceTableName)), 1);
+        assertThat(result).containsExactlyInAnyOrder(Row.of(value));
+
+        // insert into ... select from
+
+        final String sinkTopic = "sink_topic_" + randomAlphanumeric(3);
+        createTestTopic(sinkTopic, 1);
+
+        String sinkTableName = randomAlphabetic(5);
+        pulsar.operator().sendMessage(sourceTopic, schema, value);
+        final String createSinkTable =
+                String.format(
+                        "create table %s (\n"
+                                + "  `field_1` %s\n"
+                                + ") with (\n"
+                                + "  'connector' = '%s',\n"
+                                + "  'topics' = '%s',\n"
+                                + "  'service-url' = '%s',\n"
+                                + "  'admin-url' = '%s',\n"
+                                + "  'format' = '%s'\n"
+                                + ")",
+                        sinkTableName,
+                        flinkTableDataType,
+                        PulsarTableFactory.IDENTIFIER,
+                        sinkTopic,
+                        pulsar.operator().serviceUrl(),
+                        pulsar.operator().adminUrl(),
+                        format);
+
+        tableEnv.executeSql(createSinkTable);
+        tableEnv.executeSql(
+                String.format("INSERT INTO %s SELECT * FROM %s", sinkTableName, sourceTableName));
+        Message<T> sinkResult = pulsar.operator().receiveMessage(sinkTopic, schema);
+        assertThat(sinkResult.getValue()).isEqualTo(value);
+    }
+
+    @ParameterizedTest
+    @MethodSource("provideAvroBasedSchemaData")
+    @Disabled("flink-128")
+    void sendMessageToTopicAndReadUsingAvroBasedSchema(
+            String format, Schema<TestingUser> schema, TestingUser value) throws Exception {
+        final String sourceTopic = "source_topic_" + randomAlphanumeric(3);
+        createTestTopic(sourceTopic, 1);
+        pulsar.operator().sendMessage(sourceTopic, schema, value);
+
+        String sourceTableName = randomAlphabetic(5);
+        final String createSourceTable =
+                String.format(
+                        "create table %s (\n"
+                                + "  name STRING,\n"
+                                + "  age INT\n"
+                                + ") with (\n"
+                                + "  'connector' = '%s',\n"
+                                + "  'topics' = '%s',\n"
+                                + "  'service-url' = '%s',\n"
+                                + "  'admin-url' = '%s',\n"
+                                + "  'format' = '%s'\n"
+                                + ")",
+                        sourceTableName,
+                        PulsarTableFactory.IDENTIFIER,
+                        sourceTopic,
+                        pulsar.operator().serviceUrl(),
+                        pulsar.operator().adminUrl(),
+                        format);
+
+        tableEnv.executeSql(createSourceTable);
+        final List<Row> result =
+                collectRows(
+                        tableEnv.sqlQuery(String.format("SELECT * FROM %s", sourceTableName)), 1);
+        assertThat(result).containsExactlyInAnyOrder(Row.of(value.getName(), value.getAge()));
+    }
+
+    @ParameterizedTest
+    @MethodSource("provideAvroBasedSchemaData")
+    void selectIntoTableUsingAvroBasedSchema(
+            String format, Schema<TestingUser> schema, TestingUser value) throws Exception {
+        final String sourceTopic = "source_topic_" + randomAlphanumeric(3);
+        createTestTopic(sourceTopic, 1);
+        pulsar.operator().sendMessage(sourceTopic, schema, value);
+
+        String sourceTableName = randomAlphabetic(5);
+        final String createSourceTable =
+                String.format(
+                        "create table %s (\n"
+                                + "  age INT,\n"
+                                + "  name STRING\n"
+                                + ") with (\n"
+                                + "  'connector' = '%s',\n"
+                                + "  'topics' = '%s',\n"
+                                + "  'service-url' = '%s',\n"
+                                + "  'admin-url' = '%s',\n"
+                                + "  'format' = '%s'\n"
+                                + ")",
+                        sourceTableName,
+                        PulsarTableFactory.IDENTIFIER,
+                        sourceTopic,
+                        pulsar.operator().serviceUrl(),
+                        pulsar.operator().adminUrl(),
+                        format);
+
+        tableEnv.executeSql(createSourceTable);
+
+        final String sinkTopic = "sink_topic_" + randomAlphanumeric(3);
+        createTestTopic(sinkTopic, 1);
+        String sinkTableName = randomAlphabetic(5);
+        final String createSinkTable =
+                String.format(
+                        "create table %s (\n"
+                                + "  age INT,\n"
+                                + "  name STRING\n"
+                                + ") with (\n"
+                                + "  'connector' = '%s',\n"
+                                + "  'topics' = '%s',\n"
+                                + "  'service-url' = '%s',\n"
+                                + "  'admin-url' = '%s',\n"
+                                + "  'format' = '%s'\n"
+                                + ")",
+                        sinkTableName,
+                        PulsarTableFactory.IDENTIFIER,
+                        sinkTopic,
+                        pulsar.operator().serviceUrl(),
+                        pulsar.operator().adminUrl(),
+                        format);
+
+        tableEnv.executeSql(createSinkTable);
+        tableEnv.executeSql(
+                String.format("INSERT INTO %s SELECT * FROM %s", sinkTableName, sourceTableName));
+        Message<TestingUser> sinkResult = pulsar.operator().receiveMessage(sinkTopic, schema);
+        assertThat(sinkResult.getValue()).isEqualTo(value);
     }
 
     private static final class TestingSinkFunction implements SinkFunction<Row> {
@@ -287,7 +473,33 @@ public class PulsarTableITCase extends PulsarTableTestBase {
         }
     }
 
-    private String formatOptions(String format) {
-        return String.format("'format' = '%s'", format);
+    private static Stream<Arguments> provideSchemaData() {
+        return Stream.of(
+                Arguments.of(RAW_FORMAT, Schema.INT8, (byte) 0xa, DataTypes.TINYINT().toString()),
+                Arguments.of(
+                        RAW_FORMAT, Schema.INT16, Short.MAX_VALUE, DataTypes.SMALLINT().toString()),
+                Arguments.of(
+                        RAW_FORMAT, Schema.INT32, Integer.MAX_VALUE, DataTypes.INT().toString()),
+                Arguments.of(
+                        RAW_FORMAT, Schema.INT64, Long.MAX_VALUE, DataTypes.BIGINT().toString()),
+                Arguments.of(
+                        RAW_FORMAT, Schema.FLOAT, Float.MAX_VALUE, DataTypes.FLOAT().toString()),
+                Arguments.of(
+                        RAW_FORMAT, Schema.DOUBLE, Double.MAX_VALUE, DataTypes.DOUBLE().toString()),
+                Arguments.of(RAW_FORMAT, Schema.BOOL, Boolean.TRUE, DataTypes.BOOLEAN().toString()),
+                Arguments.of(RAW_FORMAT, Schema.BYTES, new byte[1], DataTypes.BYTES().toString()),
+                Arguments.of(
+                        RAW_FORMAT,
+                        Schema.STRING,
+                        "this is a string",
+                        DataTypes.STRING().toString()));
+    }
+
+    private static Stream<Arguments> provideAvroBasedSchemaData() {
+        return Stream.of(
+                Arguments.of(JSON_FORMAT, Schema.JSON(TestingUser.class), createRandomUser())
+                //                Arguments.of(AVRO_FORMAT, Schema.AVRO(TestingUser.class),
+                // createRandomUser())
+                );
     }
 }

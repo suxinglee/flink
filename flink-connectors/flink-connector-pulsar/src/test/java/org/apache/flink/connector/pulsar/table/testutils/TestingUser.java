@@ -2,6 +2,9 @@ package org.apache.flink.connector.pulsar.table.testutils;
 
 import java.io.Serializable;
 import java.util.Objects;
+import java.util.concurrent.ThreadLocalRandom;
+
+import static org.apache.commons.lang3.RandomStringUtils.randomAlphabetic;
 
 /** A test POJO class. */
 public class TestingUser implements Serializable {
@@ -40,5 +43,19 @@ public class TestingUser implements Serializable {
     @Override
     public int hashCode() {
         return Objects.hash(name, age);
+    }
+
+    public static TestingUser createUser(String name, Integer age) {
+        TestingUser user = new TestingUser();
+        user.setAge(age);
+        user.setName(name);
+        return user;
+    }
+
+    public static TestingUser createRandomUser() {
+        TestingUser user = new TestingUser();
+        user.setName(randomAlphabetic(5));
+        user.setAge(ThreadLocalRandom.current().nextInt(0, Integer.MAX_VALUE));
+        return user;
     }
 }
