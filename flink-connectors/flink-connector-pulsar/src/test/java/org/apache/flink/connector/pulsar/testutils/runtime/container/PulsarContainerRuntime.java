@@ -56,9 +56,6 @@ public class PulsarContainerRuntime implements PulsarRuntime {
     private static final String PULSAR_ADMIN_URL =
             String.format("http://%s:%d", PULSAR_INTERNAL_HOSTNAME, BROKER_HTTP_PORT);
 
-    private static final String TXN_CONFIG_FILE = "containers/txnStandalone.conf";
-    private static final String AUTH_CONFIG_FILE = "containers/authStandalone.conf";
-
     /**
      * Create a pulsar container provider by a predefined version, this constance {@link
      * DockerImageVersions#PULSAR} should be bumped after the new pulsar release.
@@ -69,14 +66,9 @@ public class PulsarContainerRuntime implements PulsarRuntime {
 
     private boolean boundFlink = false;
     private PulsarRuntimeOperator operator;
-    private String configFile;
 
     public PulsarContainerRuntime(boolean authEnabled) {
-        if (authEnabled) {
-            configFile = AUTH_CONFIG_FILE;
-        } else {
-            configFile = TXN_CONFIG_FILE;
-        }
+        // TODO Add authentication support.
     }
 
     public PulsarContainerRuntime bindWithFlinkContainer(GenericContainer<?> flinkContainer) {
@@ -110,7 +102,7 @@ public class PulsarContainerRuntime implements PulsarRuntime {
                         .forStatusCode(200)
                         .withStartupTimeout(Duration.ofMinutes(5)));
         // Set custom startup script.
-        container.withCommand("/pulsar/bin/bootstrap.sh");
+        container.withCommand("sh /pulsar/bin/bootstrap.sh");
 
         // Start the Pulsar Container.
         container.start();

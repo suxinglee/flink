@@ -73,6 +73,7 @@ public final class CursorPosition implements Serializable {
     /**
      * The position type for reader to choose whether timestamp or message id as the start position.
      */
+    @PublicEvolving
     public enum Type {
         TIMESTAMP,
 
