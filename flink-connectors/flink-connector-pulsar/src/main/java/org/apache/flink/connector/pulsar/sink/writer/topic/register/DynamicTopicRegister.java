@@ -106,6 +106,8 @@ public class DynamicTopicRegister<IN> implements TopicRegister<IN> {
                                         }
                                     }
                                 });
+        // Open the topic extractor instance.
+        topicExtractor.open(sinkConfiguration);
     }
 
     @Override

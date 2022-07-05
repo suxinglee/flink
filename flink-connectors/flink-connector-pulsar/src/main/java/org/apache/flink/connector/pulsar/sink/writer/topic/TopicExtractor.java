@@ -19,6 +19,7 @@
 package org.apache.flink.connector.pulsar.sink.writer.topic;
 
 import org.apache.flink.annotation.PublicEvolving;
+import org.apache.flink.connector.pulsar.sink.config.SinkConfiguration;
 import org.apache.flink.connector.pulsar.sink.writer.router.TopicRouter;
 import org.apache.flink.connector.pulsar.source.enumerator.topic.TopicMetadata;
 import org.apache.flink.connector.pulsar.source.enumerator.topic.TopicPartition;
@@ -39,6 +40,11 @@ public interface TopicExtractor<IN> extends Serializable {
      *     {@link TopicRouter} if you return a topic name without partition information.
      */
     TopicPartition extract(IN in, TopicMetadataProvider provider);
+
+    /** Implement this method if you have some non-serializable field. */
+    default void open(SinkConfiguration sinkConfiguration) {
+        // Nothing to do by default.
+    }
 
     /**
      * A wrapper for {@link PulsarAdmin} instance, we won't expose the Pulsar admin interface for
