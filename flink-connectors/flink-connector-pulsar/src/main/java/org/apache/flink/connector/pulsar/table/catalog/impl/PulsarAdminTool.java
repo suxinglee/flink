@@ -27,8 +27,6 @@ import org.apache.pulsar.client.impl.schema.BytesSchema;
 import org.apache.pulsar.common.naming.NamespaceName;
 import org.apache.pulsar.common.naming.TopicName;
 import org.apache.pulsar.common.partition.PartitionedTopicMetadata;
-import org.apache.pulsar.common.policies.data.PartitionedTopicInternalStats;
-import org.apache.pulsar.common.policies.data.PersistentTopicInternalStats;
 import org.apache.pulsar.common.policies.data.RetentionPolicies;
 import org.apache.pulsar.common.policies.data.TenantInfoImpl;
 import org.apache.pulsar.common.schema.SchemaInfo;
@@ -37,7 +35,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -150,22 +147,8 @@ public class PulsarAdminTool implements AutoCloseable {
     public void deleteTopic(String topicName) throws PulsarAdminException {
 
         try {
-            PartitionedTopicInternalStats partitionedInternalStats =
-                    admin.topics().getPartitionedInternalStats(topicName);
-            final Optional<PersistentTopicInternalStats> any =
-                    partitionedInternalStats.partitions.entrySet().stream()
-                            .map(Map.Entry::getValue)
-                            .filter(p -> !p.cursors.isEmpty())
-                            .findAny();
-            if (any.isPresent()) {
-                throw new IllegalStateException(
-                        String.format(
-                                "The topic[%s] cannot be deleted because there are subscribers",
-                                topicName));
-            }
             admin.topics().deletePartitionedTopic(topicName, true);
         } catch (PulsarAdminException.NotFoundException e) {
-            //            log.warn("topic<{}> is not exit, try delete force it", topicName);
             admin.topics().delete(topicName, true);
         }
     }
