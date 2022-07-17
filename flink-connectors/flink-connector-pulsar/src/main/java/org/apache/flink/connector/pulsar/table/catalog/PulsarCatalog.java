@@ -24,6 +24,7 @@ import org.apache.flink.connector.pulsar.table.catalog.impl.PulsarCatalogSupport
 import org.apache.flink.connector.pulsar.table.catalog.impl.SchemaTranslator;
 import org.apache.flink.table.catalog.CatalogBaseTable;
 import org.apache.flink.table.catalog.CatalogDatabase;
+import org.apache.flink.table.catalog.CatalogDatabaseImpl;
 import org.apache.flink.table.catalog.CatalogPartition;
 import org.apache.flink.table.catalog.CatalogPartitionSpec;
 import org.apache.flink.table.catalog.GenericInMemoryCatalog;
@@ -49,8 +50,11 @@ import org.apache.pulsar.client.admin.PulsarAdminException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Optional;
+
+import static org.apache.flink.connector.pulsar.table.catalog.PulsarCatalogFactoryOptions.DEFAULT_DATABASE;
 
 /**
  * Catalog implementation to use Pulsar to store metadatas for Flink tables/databases.
@@ -85,7 +89,7 @@ public class PulsarCatalog extends GenericInMemoryCatalog {
 
     public static final String DEFAULT_TENANT = "__flink_catalog";
 
-    public static final String DEFAULT_DB = "default";
+    public static final String DEFAULT_DB = "default_database";
 
     public PulsarCatalog(
             String catalogName,
@@ -115,6 +119,15 @@ public class PulsarCatalog extends GenericInMemoryCatalog {
                                 + catalogConfiguration.toString(),
                         e);
             }
+        }
+
+        CatalogDatabaseImpl defaultDatabase =
+                new CatalogDatabaseImpl(new HashMap<>(), "The default database for PulsarCatalog");
+        try {
+            createDatabase(catalogConfiguration.get(DEFAULT_DATABASE), defaultDatabase, true);
+        } catch (DatabaseAlreadyExistException e) {
+            throw new CatalogException(
+                    "Error: should ignore default database if not exist instead of throwing exception");
         }
     }
 

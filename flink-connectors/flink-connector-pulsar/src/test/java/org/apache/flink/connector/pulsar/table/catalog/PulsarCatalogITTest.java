@@ -49,9 +49,11 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
+import static org.apache.flink.connector.pulsar.table.catalog.PulsarCatalog.DEFAULT_DB;
 import static org.apache.flink.connector.pulsar.table.catalog.PulsarCatalogFactory.CATALOG_CONFIG_VALIDATOR;
 import static org.apache.flink.connector.pulsar.table.testutils.PulsarTableTestUtils.collectRows;
 import static org.apache.flink.connector.pulsar.table.testutils.SchemaData.INTEGER_LIST;
@@ -188,6 +190,29 @@ public class PulsarCatalogITTest extends PulsarTableTestBase {
     }
 
     @Test
+    void createCatalogAndExpectDefaultDatabase()
+            throws ExecutionException, InterruptedException, TimeoutException {
+        tableEnv.useCatalog(PULSAR_CATALOG1);
+        assertThatNoException()
+                .isThrownBy(() -> tableEnv.executeSql(String.format("USE %s", DEFAULT_DB)));
+
+        assertThatNoException()
+                .isThrownBy(() -> tableEnv.executeSql(String.format("SHOW TABLES", DEFAULT_DB)));
+
+        String tableName = newTopicName();
+        String tableDDL =
+                String.format(
+                        "CREATE TABLE %s (\n"
+                                + "  oid STRING,\n"
+                                + "  totalprice INT,\n"
+                                + "  customerid STRING\n"
+                                + ")",
+                        tableName);
+        tableEnv.executeSql(tableDDL).await(10, TimeUnit.SECONDS);
+        assertThat(tableEnv.listTables()).contains(tableName);
+    }
+
+    @Test
     void createNativeDatabaseShouldFail() {
         tableEnv.useCatalog(PULSAR_CATALOG1);
         String nativeDatabaseName = "tn1/ns1";
@@ -287,7 +312,7 @@ public class PulsarCatalogITTest extends PulsarTableTestBase {
         tableEnv.executeSql(dbDDL).print();
         tableEnv.useDatabase(databaseName);
 
-        String sinkDDL =
+        String tableDDL =
                 String.format(
                         "CREATE TABLE %s (\n"
                                 + "  oid STRING,\n"
@@ -295,7 +320,7 @@ public class PulsarCatalogITTest extends PulsarTableTestBase {
                                 + "  customerid STRING\n"
                                 + ")",
                         tableName);
-        tableEnv.executeSql(sinkDDL).await(10, TimeUnit.SECONDS);
+        tableEnv.executeSql(tableDDL).await(10, TimeUnit.SECONDS);
         assertThat(tableEnv.listTables()).contains(tableName);
     }
 

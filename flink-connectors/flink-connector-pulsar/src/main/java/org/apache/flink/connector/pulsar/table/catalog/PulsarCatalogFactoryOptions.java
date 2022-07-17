@@ -35,7 +35,9 @@ public final class PulsarCatalogFactoryOptions {
     public static final ConfigOption<String> DEFAULT_DATABASE =
             ConfigOptions.key(CommonCatalogOptions.DEFAULT_DATABASE_KEY)
                     .stringType()
-                    .defaultValue(PulsarCatalog.DEFAULT_DB);
+                    .defaultValue(PulsarCatalog.DEFAULT_DB)
+                    .withDescription(
+                            "The default database when using PulsarCatalog. It will be created if not exist.");
 
     public static final ConfigOption<String> CATALOG_ADMIN_URL =
             ConfigOptions.key("catalog-admin-url")
