@@ -20,6 +20,7 @@ package org.apache.flink.connector.pulsar.table;
 
 import org.apache.flink.connector.pulsar.table.testutils.MockPulsarAuthentication;
 import org.apache.flink.table.api.ValidationException;
+import org.apache.flink.table.factories.FactoryUtil;
 
 import org.junit.jupiter.api.Test;
 
@@ -38,6 +39,7 @@ import static org.apache.flink.connector.pulsar.table.PulsarTableOptions.SOURCE_
 import static org.apache.flink.connector.pulsar.table.PulsarTableOptions.SOURCE_START_FROM_PUBLISH_TIME;
 import static org.apache.flink.connector.pulsar.table.PulsarTableOptions.SOURCE_SUBSCRIPTION_TYPE;
 import static org.apache.flink.connector.pulsar.table.PulsarTableOptions.TOPICS;
+import static org.apache.flink.table.factories.TestDynamicTableFactory.VALUE_FORMAT;
 import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.assertThatNoException;
 
@@ -50,7 +52,7 @@ public class PulsarTableOptionsTest extends PulsarTableTestBase {
     @Test
     void noTopicsSpecified() {
         final String topicName = randomTopicName();
-        Map<String, String> testConfigs = new HashMap<>();
+        Map<String, String> testConfigs = testConfigWithFormat();
         runSql(topicName, createTestConfig(testConfigs));
         runSinkAndExpectException(
                 topicName,
@@ -63,8 +65,7 @@ public class PulsarTableOptionsTest extends PulsarTableTestBase {
     @Test
     void invalidEmptyTopics() {
         final String topicName = randomTopicName();
-        Map<String, String> testConfigs = new HashMap<>();
-
+        Map<String, String> testConfigs = testConfigWithFormat();
         testConfigs.put(TOPICS.key(), "");
         runSql(topicName, createTestConfig(testConfigs));
         runSinkAndExpectException(
@@ -74,7 +75,7 @@ public class PulsarTableOptionsTest extends PulsarTableTestBase {
     @Test
     void topicsWithSemicolon() {
         final String topicName = randomTopicName();
-        Map<String, String> testConfigs = new HashMap<>();
+        Map<String, String> testConfigs = testConfigWithFormat();
         testConfigs.put(TOPICS.key(), topicName + ";");
         runSql(topicName, createTestConfig(testConfigs));
         runSinkAndExpectSucceed(topicName);
@@ -84,7 +85,7 @@ public class PulsarTableOptionsTest extends PulsarTableTestBase {
     @Test
     void invalidTopicName() {
         final String topicName = randomTopicName();
-        Map<String, String> testConfigs = new HashMap<>();
+        Map<String, String> testConfigs = testConfigWithFormat();
         String invalidTopicName = "persistent://tenant/no-topic";
         testConfigs.put(TOPICS.key(), invalidTopicName);
         runSql(topicName, createTestConfig(testConfigs));
@@ -99,7 +100,7 @@ public class PulsarTableOptionsTest extends PulsarTableTestBase {
     @Test
     void topicsList() {
         final String topicName = randomTopicName();
-        Map<String, String> testConfigs = new HashMap<>();
+        Map<String, String> testConfigs = testConfigWithFormat();
         testConfigs.put(
                 TOPICS.key(),
                 topicNameWithPartition(topicName, 0) + ";" + topicNameWithPartition(topicName, 1));
@@ -109,9 +110,40 @@ public class PulsarTableOptionsTest extends PulsarTableTestBase {
     }
 
     @Test
-    void subscriptionType() {
+    void usingFormat() {
         final String topicName = randomTopicName();
         Map<String, String> testConfigs = testConfigWithTopic(topicName);
+        testConfigs.put(FactoryUtil.FORMAT.key(), "json");
+        runSql(topicName, createTestConfig(testConfigs));
+        runSinkAndExpectSucceed(topicName);
+        runSourceAndExpectSucceed(topicName);
+    }
+
+    @Test
+    void usingValueFormat() {
+        final String topicName = randomTopicName();
+        Map<String, String> testConfigs = testConfigWithTopic(topicName);
+        testConfigs.put(VALUE_FORMAT.key(), "json");
+        runSql(topicName, createTestConfig(testConfigs));
+        runSinkAndExpectSucceed(topicName);
+        runSourceAndExpectSucceed(topicName);
+    }
+
+    @Test
+    void usingValueFormatAndFormatOptions() {
+        final String topicName = randomTopicName();
+        Map<String, String> testConfigs = testConfigWithTopic(topicName);
+        testConfigs.put(VALUE_FORMAT.key(), "json");
+        testConfigs.put("value.json.fail-on-missing-field", "false");
+        runSql(topicName, createTestConfig(testConfigs));
+        runSinkAndExpectSucceed(topicName);
+        runSourceAndExpectSucceed(topicName);
+    }
+
+    @Test
+    void subscriptionType() {
+        final String topicName = randomTopicName();
+        Map<String, String> testConfigs = testConfigWithTopicAndFormat(topicName);
         testConfigs.put(SOURCE_SUBSCRIPTION_TYPE.key(), "Exclusive");
         runSql(topicName, createTestConfig(testConfigs));
         runSinkAndExpectSucceed(topicName);
@@ -121,7 +153,7 @@ public class PulsarTableOptionsTest extends PulsarTableTestBase {
     @Test
     void invalidUnsupportedSubscriptionType() {
         final String topicName = randomTopicName();
-        Map<String, String> testConfigs = testConfigWithTopic(topicName);
+        Map<String, String> testConfigs = testConfigWithTopicAndFormat(topicName);
         testConfigs.put(SOURCE_SUBSCRIPTION_TYPE.key(), "Key_Shared");
         runSql(topicName, createTestConfig(testConfigs));
         runSinkAndExpectSucceed(topicName);
@@ -134,7 +166,7 @@ public class PulsarTableOptionsTest extends PulsarTableTestBase {
     @Test
     void invalidNonExistSubscriptionType() {
         final String topicName = randomTopicName();
-        Map<String, String> testConfigs = testConfigWithTopic(topicName);
+        Map<String, String> testConfigs = testConfigWithTopicAndFormat(topicName);
         testConfigs.put(SOURCE_SUBSCRIPTION_TYPE.key(), "random-subscription-type");
         runSql(topicName, createTestConfig(testConfigs));
         runSinkAndExpectException(
@@ -145,7 +177,7 @@ public class PulsarTableOptionsTest extends PulsarTableTestBase {
     @Test
     void messageIdStartCursorEarliest() {
         final String topicName = randomTopicName();
-        Map<String, String> testConfigs = testConfigWithTopic(topicName);
+        Map<String, String> testConfigs = testConfigWithTopicAndFormat(topicName);
 
         testConfigs.put(SOURCE_START_FROM_MESSAGE_ID.key(), "earliest");
 
@@ -157,7 +189,7 @@ public class PulsarTableOptionsTest extends PulsarTableTestBase {
     @Test
     void messageIdStartCursorLatest() {
         final String topicName = randomTopicName();
-        Map<String, String> testConfigs = testConfigWithTopic(topicName);
+        Map<String, String> testConfigs = testConfigWithTopicAndFormat(topicName);
 
         testConfigs.put(SOURCE_START_FROM_MESSAGE_ID.key(), "latest");
 
@@ -169,7 +201,7 @@ public class PulsarTableOptionsTest extends PulsarTableTestBase {
     @Test
     void messageIdStartCursorExact() {
         final String topicName = randomTopicName();
-        Map<String, String> testConfigs = testConfigWithTopic(topicName);
+        Map<String, String> testConfigs = testConfigWithTopicAndFormat(topicName);
 
         testConfigs.put(SOURCE_START_FROM_MESSAGE_ID.key(), "0:0:-1");
 
@@ -181,7 +213,7 @@ public class PulsarTableOptionsTest extends PulsarTableTestBase {
     @Test
     void invalidMessageIdStartCursorEmptyId() {
         final String topicName = randomTopicName();
-        Map<String, String> testConfigs = testConfigWithTopic(topicName);
+        Map<String, String> testConfigs = testConfigWithTopicAndFormat(topicName);
 
         testConfigs.put(SOURCE_START_FROM_MESSAGE_ID.key(), "0:0:");
 
@@ -197,7 +229,7 @@ public class PulsarTableOptionsTest extends PulsarTableTestBase {
     @Test
     void invalidMessageIdStartCursorIncomplete() {
         final String topicName = randomTopicName();
-        Map<String, String> testConfigs = testConfigWithTopic(topicName);
+        Map<String, String> testConfigs = testConfigWithTopicAndFormat(topicName);
 
         testConfigs.put(SOURCE_START_FROM_MESSAGE_ID.key(), "0:0");
 
@@ -212,7 +244,7 @@ public class PulsarTableOptionsTest extends PulsarTableTestBase {
     @Test
     void timestampStartCursor() {
         final String topicName = randomTopicName();
-        Map<String, String> testConfigs = testConfigWithTopic(topicName);
+        Map<String, String> testConfigs = testConfigWithTopicAndFormat(topicName);
 
         testConfigs.put(SOURCE_START_FROM_PUBLISH_TIME.key(), "233010230");
 
@@ -224,7 +256,7 @@ public class PulsarTableOptionsTest extends PulsarTableTestBase {
     @Test
     void topicRoutingMode() {
         final String topicName = randomTopicName();
-        Map<String, String> testConfigs = testConfigWithTopic(topicName);
+        Map<String, String> testConfigs = testConfigWithTopicAndFormat(topicName);
 
         testConfigs.put(SINK_TOPIC_ROUTING_MODE.key(), "message-key-hash");
 
@@ -236,7 +268,7 @@ public class PulsarTableOptionsTest extends PulsarTableTestBase {
     @Test
     void invalidTopicRouter() {
         final String topicName = randomTopicName();
-        Map<String, String> testConfigs = testConfigWithTopic(topicName);
+        Map<String, String> testConfigs = testConfigWithTopicAndFormat(topicName);
 
         String invalidClassName = "invalid class name";
         testConfigs.put(SINK_CUSTOM_TOPIC_ROUTER.key(), invalidClassName);
@@ -253,7 +285,7 @@ public class PulsarTableOptionsTest extends PulsarTableTestBase {
     @Test
     void messageDelay() {
         final String topicName = randomTopicName();
-        Map<String, String> testConfigs = testConfigWithTopic(topicName);
+        Map<String, String> testConfigs = testConfigWithTopicAndFormat(topicName);
 
         testConfigs.put(SINK_MESSAGE_DELAY_INTERVAL.key(), "10s");
 
@@ -265,7 +297,7 @@ public class PulsarTableOptionsTest extends PulsarTableTestBase {
     @Test
     void invalidMessageDelay() {
         final String topicName = randomTopicName();
-        Map<String, String> testConfigs = testConfigWithTopic(topicName);
+        Map<String, String> testConfigs = testConfigWithTopicAndFormat(topicName);
 
         testConfigs.put(SINK_MESSAGE_DELAY_INTERVAL.key(), "invalid-duration");
 
@@ -281,7 +313,7 @@ public class PulsarTableOptionsTest extends PulsarTableTestBase {
     @Test
     void subscriptionInitialPosition() {
         final String topicName = randomTopicName();
-        Map<String, String> testConfigs = testConfigWithTopic(topicName);
+        Map<String, String> testConfigs = testConfigWithTopicAndFormat(topicName);
 
         testConfigs.put(PULSAR_SUBSCRIPTION_INITIAL_POSITION.key(), "Earliest");
 
@@ -297,7 +329,7 @@ public class PulsarTableOptionsTest extends PulsarTableTestBase {
     @Test
     void pulsarOptionsAuthParamMap() {
         final String topicName = randomTopicName();
-        Map<String, String> testConfigs = testConfigWithTopic(topicName);
+        Map<String, String> testConfigs = testConfigWithTopicAndFormat(topicName);
 
         testConfigs.put(PULSAR_AUTH_PARAM_MAP.key(), "key1:value1,key2:value2");
         testConfigs.put(
@@ -315,7 +347,7 @@ public class PulsarTableOptionsTest extends PulsarTableTestBase {
     @Test
     void unusedConfigOptions() {
         final String topicName = randomTopicName();
-        Map<String, String> testConfigs = testConfigWithTopic(topicName);
+        Map<String, String> testConfigs = testConfigWithTopicAndFormat(topicName);
 
         testConfigs.put("random_config", "random_value");
         runSql(topicName, createTestConfig(testConfigs));
@@ -343,11 +375,10 @@ public class PulsarTableOptionsTest extends PulsarTableTestBase {
                                 + "  `physical_2` INT,\n"
                                 + "  `physical_3` BOOLEAN\n"
                                 + ") WITH (\n"
-                                + "  'connector' = 'pulsar',\n"
                                 + "  'service-url' = '%s',\n"
                                 + "  'admin-url' = '%s',\n"
-                                + "  %s"
-                                + "  'format' = 'json'\n"
+                                + "  %s\n"
+                                + "  'connector' = 'pulsar'"
                                 + ")",
                         topicName,
                         pulsar.operator().serviceUrl(),
@@ -410,6 +441,19 @@ public class PulsarTableOptionsTest extends PulsarTableTestBase {
     private String randomTopicName() {
         final String testTopicPrefix = "test_config_topic";
         return testTopicPrefix + randomAlphabetic(5);
+    }
+
+    private Map<String, String> testConfigWithTopicAndFormat(String tableName) {
+        Map<String, String> testConfigs = new HashMap<>();
+        testConfigs.put(TOPICS.key(), tableName);
+        testConfigs.put(FactoryUtil.FORMAT.key(), "json");
+        return testConfigs;
+    }
+
+    private Map<String, String> testConfigWithFormat() {
+        Map<String, String> testConfigs = new HashMap<>();
+        testConfigs.put(FactoryUtil.FORMAT.key(), "json");
+        return testConfigs;
     }
 
     private Map<String, String> testConfigWithTopic(String tableName) {

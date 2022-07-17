@@ -19,7 +19,6 @@
 package org.apache.flink.connector.pulsar.table;
 
 import org.apache.flink.api.common.serialization.DeserializationSchema;
-import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.ReadableConfig;
 import org.apache.flink.connector.pulsar.sink.writer.router.TopicRoutingMode;
 import org.apache.flink.table.api.ValidationException;
@@ -32,7 +31,6 @@ import org.apache.flink.types.RowKind;
 import org.apache.pulsar.client.api.SubscriptionType;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 import static org.apache.flink.connector.pulsar.table.PulsarTableOptionUtils.getValueDecodingFormat;
@@ -54,19 +52,16 @@ public class PulsarTableValidationUtils {
     public static void validatePrimaryKeyConstraints(
             ObjectIdentifier tableName,
             int[] primaryKeyIndexes,
-            Map<String, String> options,
             FactoryUtil.TableFactoryHelper helper) {
         final DecodingFormat<DeserializationSchema<RowData>> format =
                 getValueDecodingFormat(helper);
         if (primaryKeyIndexes.length > 0
                 && format.getChangelogMode().containsOnly(RowKind.INSERT)) {
-            Configuration configuration = Configuration.fromMap(options);
-            String formatName = configuration.getOptional(FactoryUtil.FORMAT).get();
             throw new ValidationException(
                     String.format(
                             "The Pulsar table '%s' with '%s' format doesn't support defining PRIMARY KEY constraint"
                                     + " on the table, because it can't guarantee the semantic of primary key.",
-                            tableName.asSummaryString(), formatName));
+                            tableName.asSummaryString(), format));
         }
     }
 

@@ -147,6 +147,14 @@ public class PulsarTableOptions {
                                     + "from the key bytes of a Pulsar message. By default, "
                                     + "this list is empty and thus a key is undefined.");
 
+    public static final ConfigOption<String> VALUE_FORMAT =
+            ConfigOptions.key("value" + FORMAT_SUFFIX)
+                    .stringType()
+                    .noDefaultValue()
+                    .withDescription(
+                            "Defines the format identifier for decoding/encoding value data. "
+                                    + "The identifier is used to discover a suitable format factory.");
+
     // --------------------------------------------------------------------------------------------
     // Pulsar Options
     // --------------------------------------------------------------------------------------------

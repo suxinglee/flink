@@ -61,7 +61,7 @@ import static org.apache.flink.connector.pulsar.table.PulsarTableOptions.SOURCE_
 import static org.apache.flink.connector.pulsar.table.PulsarTableOptions.SOURCE_START_FROM_PUBLISH_TIME;
 import static org.apache.flink.connector.pulsar.table.PulsarTableOptions.SOURCE_SUBSCRIPTION_TYPE;
 import static org.apache.flink.connector.pulsar.table.PulsarTableOptions.TOPICS;
-import static org.apache.flink.table.factories.FactoryUtil.FORMAT;
+import static org.apache.flink.connector.pulsar.table.PulsarTableOptions.VALUE_FORMAT;
 
 /**
  * A util class for getting fields from config options, getting formats and other useful
@@ -103,14 +103,22 @@ public class PulsarTableOptionUtils {
 
     public static DecodingFormat<DeserializationSchema<RowData>> getValueDecodingFormat(
             FactoryUtil.TableFactoryHelper helper) {
-        return helper.discoverOptionalDecodingFormat(DeserializationFormatFactory.class, FORMAT)
-                .get();
+        return helper.discoverOptionalDecodingFormat(
+                        DeserializationFormatFactory.class, FactoryUtil.FORMAT)
+                .orElseGet(
+                        () ->
+                                helper.discoverDecodingFormat(
+                                        DeserializationFormatFactory.class, VALUE_FORMAT));
     }
 
     public static EncodingFormat<SerializationSchema<RowData>> getValueEncodingFormat(
             FactoryUtil.TableFactoryHelper helper) {
-        return helper.discoverOptionalEncodingFormat(SerializationFormatFactory.class, FORMAT)
-                .get();
+        return helper.discoverOptionalEncodingFormat(
+                        SerializationFormatFactory.class, FactoryUtil.FORMAT)
+                .orElseGet(
+                        () ->
+                                helper.discoverEncodingFormat(
+                                        SerializationFormatFactory.class, VALUE_FORMAT));
     }
 
     /**

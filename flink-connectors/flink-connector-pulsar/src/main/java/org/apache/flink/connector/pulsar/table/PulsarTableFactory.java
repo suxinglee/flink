@@ -81,10 +81,10 @@ import static org.apache.flink.connector.pulsar.table.PulsarTableOptions.SOURCE_
 import static org.apache.flink.connector.pulsar.table.PulsarTableOptions.SOURCE_SUBSCRIPTION_NAME;
 import static org.apache.flink.connector.pulsar.table.PulsarTableOptions.SOURCE_SUBSCRIPTION_TYPE;
 import static org.apache.flink.connector.pulsar.table.PulsarTableOptions.TOPICS;
+import static org.apache.flink.connector.pulsar.table.PulsarTableOptions.VALUE_FORMAT;
 import static org.apache.flink.connector.pulsar.table.PulsarTableValidationUtils.validatePrimaryKeyConstraints;
 import static org.apache.flink.connector.pulsar.table.PulsarTableValidationUtils.validateTableSinkOptions;
 import static org.apache.flink.connector.pulsar.table.PulsarTableValidationUtils.validateTableSourceOptions;
-import static org.apache.flink.table.factories.FactoryUtil.FORMAT;
 import static org.apache.flink.table.factories.FactoryUtil.SINK_PARALLELISM;
 
 /**
@@ -118,10 +118,7 @@ public class PulsarTableFactory implements DynamicTableSourceFactory, DynamicTab
                 PulsarSinkOptions.SINK_CONFIG_PREFIX);
 
         validatePrimaryKeyConstraints(
-                context.getObjectIdentifier(),
-                context.getPrimaryKeyIndexes(),
-                context.getCatalogTable().getOptions(),
-                helper);
+                context.getObjectIdentifier(), context.getPrimaryKeyIndexes(), helper);
 
         validateTableSourceOptions(tableOptions);
 
@@ -185,10 +182,7 @@ public class PulsarTableFactory implements DynamicTableSourceFactory, DynamicTab
                 PulsarSinkOptions.SINK_CONFIG_PREFIX);
 
         validatePrimaryKeyConstraints(
-                context.getObjectIdentifier(),
-                context.getPrimaryKeyIndexes(),
-                context.getCatalogTable().getOptions(),
-                helper);
+                context.getObjectIdentifier(), context.getPrimaryKeyIndexes(), helper);
 
         validateTableSinkOptions(tableOptions);
 
@@ -240,12 +234,14 @@ public class PulsarTableFactory implements DynamicTableSourceFactory, DynamicTab
 
     @Override
     public Set<ConfigOption<?>> requiredOptions() {
-        return Stream.of(TOPICS, ADMIN_URL, SERVICE_URL, FORMAT).collect(Collectors.toSet());
+        return Stream.of(TOPICS, ADMIN_URL, SERVICE_URL).collect(Collectors.toSet());
     }
 
     @Override
     public Set<ConfigOption<?>> optionalOptions() {
         return Stream.of(
+                        FactoryUtil.FORMAT,
+                        VALUE_FORMAT,
                         SOURCE_SUBSCRIPTION_NAME,
                         SOURCE_SUBSCRIPTION_TYPE,
                         SOURCE_START_FROM_MESSAGE_ID,
