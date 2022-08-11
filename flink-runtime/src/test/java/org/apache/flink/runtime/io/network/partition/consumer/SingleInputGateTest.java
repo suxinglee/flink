@@ -1211,7 +1211,8 @@ public class SingleInputGateTest extends InputGateTestBase {
                                 "TestTask", taskMetricGroup.executionId(), taskMetricGroup),
                         0,
                         gateDesc,
-                        SingleInputGateBuilder.NO_OP_PRODUCER_CHECKER);
+                        SingleInputGateBuilder.NO_OP_PRODUCER_CHECKER,
+                        InputChannelTestUtils.newUnregisteredInputChannelMetrics());
     }
 
     private static Map<InputGateID, SingleInputGate> createInputGateWithLocalChannels(
