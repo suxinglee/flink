@@ -20,8 +20,11 @@ package org.apache.flink.table.planner.runtime.stream.table;
 
 import org.apache.flink.table.annotation.DataTypeHint;
 import org.apache.flink.table.annotation.FunctionHint;
+import org.apache.flink.table.api.GroupWindow;
 import org.apache.flink.table.api.Table;
+import org.apache.flink.table.api.Tumble;
 import org.apache.flink.table.api.ValidationException;
+import org.apache.flink.table.expressions.Expression;
 import org.apache.flink.table.functions.ScalarFunction;
 import org.apache.flink.table.functions.TableFunction;
 import org.apache.flink.table.planner.factories.utils.TestCollectionTableFactory;
@@ -67,6 +70,8 @@ public class FunctionITCase extends StreamingTestBase {
                                         .minus(call(new SimpleScalarFunction(), $("a"), $("b"))));
         table.executeInsert("TestTable").await();
 
+
+
         assertThat(TestCollectionTableFactory.getResult(), equalTo(sinkData));
     }
 
@@ -90,6 +95,35 @@ public class FunctionITCase extends StreamingTestBase {
                         "CREATE TABLE SinkTable(s STRING, sa ARRAY<STRING>) WITH ('connector' = 'COLLECTION')");
 
         tEnv().from("SourceTable")
+                .joinLateral(call(new SimpleTableFunction(), $("s")).as("a", "b"))
+                .select($("a"), $("b"))
+                .executeInsert("SinkTable")
+                .await();
+
+        assertThat(TestCollectionTableFactory.getResult(), equalTo(sinkData));
+    }
+
+
+    @Test
+    void testWindowFunction() throws Exception {
+        final List<Row> sourceData =
+                Arrays.asList(
+                        Row.of("1,2,3"), Row.of("2,3,4"), Row.of("3,4,5"), Row.of((String) null));
+
+        final List<Row> sinkData =
+                Arrays.asList(
+                        Row.of("1,2,3", new String[] {"1", "2", "3"}),
+                        Row.of("2,3,4", new String[] {"2", "3", "4"}),
+                        Row.of("3,4,5", new String[] {"3", "4", "5"}));
+
+        TestCollectionTableFactory.reset();
+        TestCollectionTableFactory.initData(sourceData);
+
+        tEnv().executeSql("CREATE TABLE SourceTable(s STRING) WITH ('connector' = 'COLLECTION')");
+        tEnv().executeSql(
+                "CREATE TABLE SinkTable(s STRING, sa ARRAY<STRING>) WITH ('connector' = 'COLLECTION')");
+
+        tEnv().from("SourceTable").window(Tumble.over(lit(10).minutes()).on($("rowtime")).as("w"))
                 .joinLateral(call(new SimpleTableFunction(), $("s")).as("a", "b"))
                 .select($("a"), $("b"))
                 .executeInsert("SinkTable")

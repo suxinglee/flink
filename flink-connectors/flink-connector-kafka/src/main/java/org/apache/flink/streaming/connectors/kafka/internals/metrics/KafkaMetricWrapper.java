@@ -32,6 +32,7 @@ public class KafkaMetricWrapper implements Gauge<Double> {
 
     @Override
     public Double getValue() {
-        return (Double) kafkaMetric.metricValue();
+        final Object metricValue = kafkaMetric.metricValue();
+        return metricValue instanceof Double ? (Double) metricValue : 0.0;
     }
 }
